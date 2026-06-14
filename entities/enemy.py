@@ -24,7 +24,6 @@ class Enemy(pygame.sprite.Sprite):
         self.anim_frame = 0.0
         self.anim_speed = 0.1
 
-        # ── Bird-specific flying state ──────────────────────────────────────
         self.is_bird = (enemy_type == 'bird')
         if self.is_bird:
             self.vx = -2.0
@@ -52,7 +51,6 @@ class Enemy(pygame.sprite.Sprite):
         if self.enemy_type == 'koopa':
             self.rect.height = 50
 
-    # ── Physics update ────────────────────────────────────────────────────────
     def update(self, tiles):
         if self.is_bird:
             self._update_bird()
@@ -78,7 +76,6 @@ class Enemy(pygame.sprite.Sprite):
         self.update_image()
 
     def _update_bird(self):
-        # Flying enemy: no gravity, horizontal patrol with a gentle vertical bob.
         if self.is_dead:
             self.vy += GRAVITY
             self.y += self.vy
@@ -124,11 +121,10 @@ class Enemy(pygame.sprite.Sprite):
                     self.vy = 0
                     self.y  = self.rect.y
 
-    # ── Animation ─────────────────────────────────────────────────────────────
     def update_image(self):
         frame = int(self.anim_frame) % 2
         if self.is_bird:
-            if self.vx > 0:   # moving right -> use flipped frames
+            if self.vx > 0:
                 base = self.sprites.bird['fly1_r'] if frame == 0 else self.sprites.bird['fly2_r']
             else:
                 base = self.sprites.bird['fly1'] if frame == 0 else self.sprites.bird['fly2']
@@ -154,7 +150,6 @@ class Enemy(pygame.sprite.Sprite):
                 )
                 self.image = pygame.transform.flip(base, self.vx > 0, False)
 
-    # ── Combat ────────────────────────────────────────────────────────────────
     def squish(self):
         sfx_stomp()
         if self.is_bird:
@@ -184,6 +179,5 @@ class Enemy(pygame.sprite.Sprite):
         self.in_shell = True
         self.vx       = direction * self.shell_speed
 
-    # ── Draw ──────────────────────────────────────────────────────────────────
     def draw(self, surface, camera_x):
         surface.blit(self.image, (self.rect.x - camera_x, self.rect.y))

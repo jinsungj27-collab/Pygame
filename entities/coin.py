@@ -1,8 +1,3 @@
-"""
-Coin: a persistent, animated collectible placed along the level path.
-Unlike the coins that pop out of question blocks, these sit in the world until
-the player touches them. Collection is handled by the Game (score + counter).
-"""
 import random
 
 import pygame
@@ -15,7 +10,6 @@ class Coin(pygame.sprite.Sprite):
         self.anim_frame = random.random() * 2.0
         self.image = sprites.items['coin1']
 
-        # A generous hitbox so simply passing through collects the coin.
         self.rect = pygame.Rect(0, 0, 34, 42)
         self.rect.center = (int(x), int(y))
 

@@ -1,10 +1,3 @@
-"""
-Boss + Fireball entities for the end-of-world boss battles.
-
-The boss patrols an enclosed arena, occasionally hops, and lobs fireballs at
-the player. Stomp it on the head to deal damage; touching it (or a fireball)
-anywhere else hurts the player. After enough stomps it is defeated.
-"""
 import math
 import random
 
@@ -27,13 +20,12 @@ class Fireball(pygame.sprite.Sprite):
         self.rect.center = (int(x), int(y))
 
     def update(self, tiles=None):
-        self.vy += 0.18                      # gentle arc
+        self.vy += 0.18
         self.x += self.vx
         self.y += self.vy
         self.rect.center = (int(self.x), int(self.y))
         self.anim += 0.4
 
-        # Bounce off solid ground once or twice, then expire
         if tiles is not None:
             for t in tiles:
                 if self.rect.colliderect(t.rect) and self.vy > 0:
@@ -91,7 +83,6 @@ class Boss(pygame.sprite.Sprite):
         self.left_bound = left
         self.right_bound = right
 
-    # ── Update ────────────────────────────────────────────────────────────────
     def update(self, tiles, projectiles, player):
         if self.is_dead:
             self.vy = min(self.vy + GRAVITY, TERMINAL_VELOCITY)
@@ -103,7 +94,6 @@ class Boss(pygame.sprite.Sprite):
         if self.invincible > 0:
             self.invincible -= 1
 
-        # Horizontal patrol
         self.x += self.vx
         self.rect.centerx = int(self.x)
         if self.rect.left <= self.left_bound:
@@ -116,7 +106,6 @@ class Boss(pygame.sprite.Sprite):
             self.vx = -abs(self.vx)
         self.facing_right = self.vx > 0
 
-        # Gravity + ground
         self.vy = min(self.vy + GRAVITY, TERMINAL_VELOCITY)
         self.y += self.vy
         self.rect.midbottom = (int(self.x), int(self.y))
@@ -128,13 +117,11 @@ class Boss(pygame.sprite.Sprite):
                 self.vy = 0
                 self.on_ground = True
 
-        # Occasional hop
         self.jump_timer -= 1
         if self.jump_timer <= 0 and self.on_ground:
             self.vy = -11
             self.jump_timer = random.randint(140, 240)
 
-        # Shoot fireballs toward the player
         self.shoot_timer -= 1
         if self.shoot_timer <= 0:
             self.shoot_timer = random.randint(70, 130)
@@ -147,9 +134,7 @@ class Boss(pygame.sprite.Sprite):
 
         self.anim_frame += 0.12
 
-    # ── Combat ──────────────────────────────────────────────────────────────
     def stomp(self):
-        """Returns True if this stomp defeats the boss."""
         if self.invincible > 0 or self.is_dead:
             return False
         self.hp -= 1
@@ -167,7 +152,6 @@ class Boss(pygame.sprite.Sprite):
         self.vy = -6
         sfx_die()
 
-    # ── Draw ──────────────────────────────────────────────────────────────────
     def draw(self, surface, camera_x):
         frame = int(self.anim_frame) % 2
         img = self.sprites.boss['walk1'] if frame == 0 else self.sprites.boss['walk2']
@@ -175,11 +159,9 @@ class Boss(pygame.sprite.Sprite):
             img = pygame.transform.flip(img, True, False)
 
         if self.is_dead:
-            # Tumble + fade out
             ang = (100 - self.dead_timer) * 8
             img = pygame.transform.rotate(img, ang)
         elif self.invincible > 0 and (self.invincible // 4) % 2 == 0:
-            # hit flash
             img = img.copy()
             img.fill((255, 120, 120, 0), special_flags=pygame.BLEND_RGB_ADD)
 

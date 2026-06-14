@@ -1,12 +1,6 @@
-"""
-Pixel-art sprite data and the make_sprite() helper.
-Each sprite is a list of strings where each character maps to a colour in COLOR_MAP.
-'.' is treated as fully transparent.
-"""
 import pygame
 from constants import COLOR_MAP
 
-# ── Mario (small) ─────────────────────────────────────────────────────────────
 SMALL_MARIO_IDLE = [
     "....rrrrr...",
     "...rrrrrrrr.",
@@ -98,7 +92,6 @@ SMALL_MARIO_DUCK = [
     ".kkk....kkk.",
 ]
 
-# ── Mario (big) ────────────────────────────────────────────────────────────────
 BIG_MARIO_IDLE = [
     "......rrrrr.....",
     ".....rrrrrrrr...",
@@ -274,7 +267,6 @@ BIG_MARIO_DUCK = [
     "................",
 ]
 
-# ── Enemies ────────────────────────────────────────────────────────────────────
 GOOMBA_WALK1 = [
     ".....kkkkkk.....",
     "....kkkkkkkk....",
@@ -413,7 +405,6 @@ KOOPA_SHELL = [
     "................",
 ]
 
-# ── Blocks ─────────────────────────────────────────────────────────────────────
 BLOCK_GROUND = [
     "kkkkkkkkkkkkkkko",
     "kpppppppppppppok",
@@ -509,7 +500,6 @@ BLOCK_SOLID = [
     "dddddddddddddddd",
 ]
 
-# Spikes (hazard) — metallic spikes rising from a base plate.
 BLOCK_SPIKE = [
     "..e..e..e..e..e.",
     "..e..e..e..e..e.",
@@ -529,7 +519,6 @@ BLOCK_SPIKE = [
     "dddddddddddddddd",
 ]
 
-# ── Items ──────────────────────────────────────────────────────────────────────
 ITEM_MUSHROOM = [
     ".....rrrr......",
     "...rrrrrrrr....",
@@ -587,7 +576,6 @@ ITEM_COIN_F2 = [
     "..............",
 ]
 
-# ── Misc ───────────────────────────────────────────────────────────────────────
 FLAG = [
     "gggggggggggggggg",
     "gwwwwwwwwwwwwwwg",
@@ -608,9 +596,7 @@ FLAG = [
 ]
 
 
-# ── Renderer ───────────────────────────────────────────────────────────────────
 def make_sprite(pixel_data, scale=2, color_override=None, flip_x=False):
-    """Convert a pixel-art string list into a pygame Surface."""
     h = len(pixel_data)
     w = len(pixel_data[0]) if h > 0 else 0
     surf = pygame.Surface((w * scale, h * scale), pygame.SRCALPHA)

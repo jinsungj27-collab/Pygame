@@ -1,7 +1,3 @@
-"""
-Reusable UI widgets for menus: Button (with optional play-triangle icon)
-and a horizontal volume Slider. Pure-pygame drawing, no assets required.
-"""
 import pygame
 
 
@@ -13,7 +9,7 @@ class Button:
         self.rect.center = (cx, cy)
         self.label = label
         self.font = font
-        self.icon = icon            # None | 'play' | 'gear' | 'exit' | 'home'
+        self.icon = icon
         self.base_color = base_color
         self.hover_color = hover_color
         self.text_color = text_color
@@ -38,14 +34,12 @@ class Button:
         r = pygame.Rect(0, 0, w, h)
         r.center = self.rect.center
 
-        # drop shadow
         shadow = r.copy()
         shadow.move_ip(0, 5)
         pygame.draw.rect(surface, (0, 0, 0, 120), shadow, border_radius=12)
 
         color = self.hover_color if self.hovered else self.base_color
         pygame.draw.rect(surface, color, r, border_radius=12)
-        # subtle top highlight
         top = r.copy()
         top.height = h // 2
         hl = (min(color[0] + 30, 255), min(color[1] + 30, 255), min(color[2] + 30, 255))
@@ -55,7 +49,6 @@ class Button:
         border = (255, 220, 90) if self.hovered else (20, 25, 50)
         pygame.draw.rect(surface, border, r, width=3, border_radius=12)
 
-        # icon
         text_x_offset = 0
         if self.icon:
             self._draw_icon(surface, r)
@@ -103,7 +96,6 @@ class Slider:
         return int(self.rect.x + self.value * self.rect.width)
 
     def handle_event(self, event):
-        """Returns True if the value changed."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             kx = self._knob_x()
             knob_rect = pygame.Rect(kx - self.knob_r, self.rect.centery - self.knob_r,
@@ -129,28 +121,23 @@ class Slider:
         return self.value != old
 
     def draw(self, surface):
-        # label
         lbl = self.font.render(self.label, True, (235, 235, 245))
         surface.blit(lbl, (self.rect.x, self.rect.y - 34))
-        # percentage
         pct = self.font.render(f"{int(self.value * 100)}%", True, (255, 220, 90))
         surface.blit(pct, (self.rect.right - pct.get_width(), self.rect.y - 34))
 
-        # track
         pygame.draw.rect(surface, (30, 30, 50), self.rect, border_radius=5)
         filled = self.rect.copy()
         filled.width = int(self.value * self.rect.width)
         pygame.draw.rect(surface, (90, 180, 255), filled, border_radius=5)
         pygame.draw.rect(surface, (15, 15, 30), self.rect, width=2, border_radius=5)
 
-        # knob
         kx = self._knob_x()
         pygame.draw.circle(surface, (255, 255, 255), (kx, self.rect.centery), self.knob_r)
         pygame.draw.circle(surface, (60, 110, 200), (kx, self.rect.centery), self.knob_r, 3)
 
 
 def draw_vertical_gradient(surface, rect, top_color, bottom_color):
-    """Fill a rect with a vertical gradient."""
     x, y, w, h = rect
     for i in range(h):
         ratio = i / max(1, h - 1)

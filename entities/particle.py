@@ -10,7 +10,7 @@ class Particle(pygame.sprite.Sprite):
         self.y             = float(y)
         self.vx            = vx
         self.vy            = vy
-        self.particle_type = particle_type   # debris | score_text
+        self.particle_type = particle_type
         self.color         = color or (255, 255, 255)
 
         self.life  = 40
@@ -20,10 +20,8 @@ class Particle(pygame.sprite.Sprite):
         self.text = ""
         self.font = None
 
-    # ── Factory helpers ───────────────────────────────────────────────────────
     @classmethod
     def create_debris(cls, x, y, sprites=None):
-        """Four tumbling brick fragments."""
         brick_color = COLOR_MAP['p']
         particles = [
             cls(x,      y,      -3, -8, 'debris', brick_color),
@@ -51,7 +49,6 @@ class Particle(pygame.sprite.Sprite):
 
     @classmethod
     def create_firework(cls, x, y, color=None):
-        """A radial burst of sparks (screen-space)."""
         import math as _m
         import random as _r
         col = color or _r.choice([
@@ -68,7 +65,6 @@ class Particle(pygame.sprite.Sprite):
             ))
         return sparks
 
-    # ── Update ────────────────────────────────────────────────────────────────
     def update(self):
         self.life -= 1
         if self.particle_type == 'debris':
@@ -85,7 +81,6 @@ class Particle(pygame.sprite.Sprite):
         if self.life <= 0:
             self.kill()
 
-    # ── Draw ──────────────────────────────────────────────────────────────────
     def draw(self, surface, camera_x):
         draw_x = self.x - camera_x
         draw_y = self.y

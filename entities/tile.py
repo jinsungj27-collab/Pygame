@@ -6,7 +6,7 @@ from sounds import sfx_block_bump
 class Tile(pygame.sprite.Sprite):
     def __init__(self, x, y, tile_type, sprites, contains_item=None):
         super().__init__()
-        self.tile_type     = tile_type   # ground|brick|question|solid|spent|pipe_*
+        self.tile_type     = tile_type
         self.sprites       = sprites
         self.contains_item = contains_item
 
@@ -23,7 +23,6 @@ class Tile(pygame.sprite.Sprite):
         self.rect.x = x
         self.rect.y = y
 
-    # ── Image selection ───────────────────────────────────────────────────────
     def update_image(self):
         t = self.tile_type
         b = self.sprites.blocks
@@ -70,7 +69,6 @@ class Tile(pygame.sprite.Sprite):
             pygame.draw.line(self.image, (0, 0, 0), (TILE_SIZE - 1, 0), (TILE_SIZE - 1, TILE_SIZE), 2)
             pygame.draw.line(self.image, (0, 0, 0), (0, 0), (0, TILE_SIZE), 1)
 
-    # ── Bump animation ────────────────────────────────────────────────────────
     def bump(self):
         if not self.is_bumped and self.tile_type in ('brick', 'question'):
             self.is_bumped  = True
@@ -90,6 +88,5 @@ class Tile(pygame.sprite.Sprite):
         else:
             self.rect.y = self.original_y
 
-    # ── Draw ──────────────────────────────────────────────────────────────────
     def draw(self, surface, camera_x):
         surface.blit(self.image, (self.rect.x - camera_x, self.rect.y))

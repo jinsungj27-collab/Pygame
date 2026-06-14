@@ -13,7 +13,7 @@ class Item(pygame.sprite.Sprite):
         self.y     = float(y)
         self.vx    = 1.8
         self.vy    = 0.0
-        self.state = "spawning"   # spawning | active | collected
+        self.state = "spawning"
         self.spawn_y_target = y - TILE_SIZE
 
         self.image = (
@@ -29,9 +29,8 @@ class Item(pygame.sprite.Sprite):
 
         if self.item_type == 'coin':
             sfx_coin()
-            self.vy = -7.0   # coin pops upward immediately
+            self.vy = -7.0
 
-    # ── Physics update ────────────────────────────────────────────────────────
     def update(self, tiles):
         if self.state == "spawning":
             if self.item_type == 'mushroom':
@@ -88,6 +87,5 @@ class Item(pygame.sprite.Sprite):
                     self.vy = 0
                     self.y  = self.rect.y
 
-    # ── Draw ──────────────────────────────────────────────────────────────────
     def draw(self, surface, camera_x):
         surface.blit(self.image, (self.rect.x - camera_x, self.rect.y))

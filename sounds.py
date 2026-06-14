@@ -1,11 +1,3 @@
-"""
-Retro synthesised sound effects + background music.
-All audio is generated on the fly using standard Python arrays —
-no audio files needed.
-
-Volumes are scaled by the shared `settings` instance so the in-game
-settings menu can adjust SFX and music live.
-"""
 import array
 import math
 import random
@@ -15,11 +7,6 @@ from settings import settings
 
 
 def play_synth_sound(freq_list, duration, wav_type='square', volume=0.08, sample_rate=22050):
-    """
-    Synthesise and play a sound effect from a frequency list.
-    Gracefully does nothing if the pygame mixer is not initialised.
-    The final volume is scaled by settings.sfx_volume.
-    """
     try:
         if not pygame.mixer or not pygame.mixer.get_init():
             return None
@@ -63,14 +50,12 @@ def play_synth_sound(freq_list, duration, wav_type='square', volume=0.08, sample
         return None
 
 
-# ── Individual sound effects ───────────────────────────────────────────────────
-
 def sfx_jump():
     play_synth_sound([160, 680, 820], 0.18, 'square', volume=0.08)
 
 def sfx_coin():
     play_synth_sound([988], 0.07, 'sine', volume=0.1)
-    pygame.time.set_timer(pygame.USEREVENT + 10, 80)   # second tone via timer
+    pygame.time.set_timer(pygame.USEREVENT + 10, 80)
 
 def play_coin_second_tone():
     play_synth_sound([1318], 0.2, 'sine', volume=0.1)
@@ -99,8 +84,6 @@ def sfx_die():
 def sfx_clear():
     play_synth_sound([523, 659, 784, 1046, 784, 1046], 0.6, 'sine', volume=0.1)
 
-# ── New UI / event sounds ──────────────────────────────────────────────────────
-
 def sfx_menu_move():
     play_synth_sound([440, 660], 0.06, 'square', volume=0.08)
 
@@ -123,11 +106,6 @@ def sfx_firework():
     play_synth_sound([200, 1200], 0.18, 'noise', volume=0.1)
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# Background music — a looping synthesised melody.
-# ════════════════════════════════════════════════════════════════════════════
-
-# Note name -> frequency (Hz)
 _NOTE_FREQ = {
     'C3': 130.81, 'D3': 146.83, 'E3': 164.81, 'F3': 174.61, 'G3': 196.00,
     'A3': 220.00, 'B3': 246.94,
@@ -135,28 +113,22 @@ _NOTE_FREQ = {
     'A4': 440.00, 'B4': 493.88,
     'C5': 523.25, 'D5': 587.33, 'E5': 659.25, 'F5': 698.46, 'G5': 783.99,
     'A5': 880.00, 'B5': 987.77,
-    'R': 0.0,   # rest
+    'R': 0.0,
 }
 
-# A few cheerful, original loops keyed by theme index so each level type gets
-# its own tune.
 _MELODIES = [
-    # 0 - bright/overworld
     ['E4', 'E4', 'R', 'E4', 'R', 'C4', 'E4', 'R',
      'G4', 'R', 'R', 'R', 'G3', 'R', 'R', 'R',
      'C4', 'R', 'R', 'G3', 'R', 'R', 'E3', 'R',
      'A3', 'R', 'B3', 'R', 'A3', 'R', 'G3', 'R'],
-    # 1 - sunset / breezy
     ['A3', 'C4', 'E4', 'A4', 'G4', 'E4', 'C4', 'E4',
      'F4', 'A4', 'C5', 'A4', 'G4', 'E4', 'C4', 'R',
      'D4', 'F4', 'A4', 'D5', 'C5', 'A4', 'F4', 'A4',
      'E4', 'G4', 'B4', 'E5', 'D5', 'B4', 'G4', 'R'],
-    # 2 - night / mysterious
     ['E3', 'R', 'G3', 'R', 'B3', 'R', 'E4', 'R',
      'D4', 'R', 'B3', 'R', 'G3', 'R', 'E3', 'R',
      'A3', 'R', 'C4', 'R', 'E4', 'R', 'A4', 'R',
      'G4', 'R', 'E4', 'R', 'C4', 'R', 'A3', 'R'],
-    # 3 - cave / tense
     ['C3', 'E3', 'G3', 'C4', 'B3', 'G3', 'E3', 'C3',
      'D3', 'F3', 'A3', 'D4', 'C4', 'A3', 'F3', 'D3',
      'E3', 'G3', 'B3', 'E4', 'D4', 'B3', 'G3', 'E3',
@@ -164,13 +136,12 @@ _MELODIES = [
 ]
 
 _music_channel = None
-_music_sounds  = {}   # theme_index -> pygame.Sound (cached)
+_music_sounds  = {}
 
 
 def _build_music_sound(theme_index, sample_rate=22050):
-    """Render a melody loop into a pygame Sound (square lead + soft bass)."""
     melody = _MELODIES[theme_index % len(_MELODIES)]
-    note_dur = 0.16            # seconds per step
+    note_dur = 0.16
     total_samples = int(sample_rate * note_dur * len(melody))
     buf = array.array('h', [0] * total_samples)
 
@@ -184,11 +155,8 @@ def _build_music_sound(theme_index, sample_rate=22050):
             td = note_dur
             val = 0.0
             if freq > 0:
-                # square lead
                 lead = 1.0 if (t * freq) % 1.0 < 0.5 else -1.0
-                # triangle-ish bass
                 bwave = 2.0 * abs(2.0 * ((t * bass) % 1.0 - 0.5)) - 1.0
-                # short attack/decay envelope per note
                 env = min(1.0, (t / 0.02)) * (1.0 - (t / td) * 0.7)
                 val = (lead * 0.5 + bwave * 0.5) * env
             sample = int(max(-32768, min(32767, val * 0.18 * 32767)))
@@ -198,7 +166,6 @@ def _build_music_sound(theme_index, sample_rate=22050):
 
 
 def start_music(theme_index=0):
-    """Start (or restart) the looping background music for a theme."""
     global _music_channel
     try:
         if not pygame.mixer or not pygame.mixer.get_init():
@@ -228,7 +195,6 @@ def stop_music():
 
 
 def update_music_volume():
-    """Push the current settings.music_volume to the playing channel."""
     try:
         if _music_channel is not None:
             _music_channel.set_volume(settings.music_volume if settings.music_enabled else 0.0)

@@ -1,16 +1,3 @@
-"""
-Game: top-level controller — state machine, menus, multi-level progression,
-themed parallax backgrounds, collision, rendering, and the main loop.
-
-States:
-    menu     -> home screen (Play / Exit)
-    intro    -> animated "WORLD x-y" card before a level starts
-    playing  -> normal gameplay
-    paused   -> pause menu (Resume / Settings / Main Menu)
-    settings -> volume sliders + music toggle
-    clear    -> stage-clear celebration, auto-advances to the next level
-    gameover -> Retry / Main Menu
-"""
 import math
 import random
 import sys
@@ -34,7 +21,6 @@ from sounds import (
 from entities import Player, Enemy, Item, Tile, Particle
 
 
-# State identifiers
 MENU, INTRO, PLAYING, PAUSED, SETTINGS, CLEAR, GAMEOVER = (
     'menu', 'intro', 'playing', 'paused', 'settings', 'clear', 'gameover'
 )
@@ -46,7 +32,7 @@ class Game:
         try:
             pygame.mixer.init()
             pygame.mixer.set_num_channels(16)
-            pygame.mixer.set_reserved(1)   # channel 0 reserved for music
+            pygame.mixer.set_reserved(1)
         except Exception:
             pass
 
@@ -62,7 +48,6 @@ class Game:
 
         self.sprites = SpriteSheet()
 
-        # Persistent run stats
         self.score     = 0
         self.coins     = 0
         self.lives     = 3
@@ -73,7 +58,6 @@ class Game:
 
         self.state = MENU
 
-        # Animated background bookkeeping
         self.clouds = [(random.randint(0, 4000), random.randint(40, 200),
                         random.uniform(0.4, 1.0)) for _ in range(14)]
         self.stars  = [(random.randint(0, SCREEN_WIDTH), random.randint(0, 360),
@@ -81,14 +65,13 @@ class Game:
         self.menu_scroll = 0.0
 
         self.theme = THEMES[0]
-        self.level_width = 3800   # default so menu background can draw pre-level
+        self.level_width = 3800
         self.is_boss = False
         self.boss = None
         self.projectile_group = pygame.sprite.Group()
         self.coin_group = pygame.sprite.Group()
         self.cleared_boss = False
 
-        # Timers for transitions
         self.intro_timer = 0
         self.clear_timer = 0
         self.firework_cd = 0
@@ -96,29 +79,22 @@ class Game:
         self.level = None
         self._build_ui()
 
-        # Ambient menu music
         start_music(0)
 
-    # =========================================================================
-    # UI construction
-    # =========================================================================
     def _build_ui(self):
         cx = SCREEN_WIDTH // 2
 
-        # Home screen
         self.btn_play = Button(cx, 360, 260, 64, "PLAY", self.font_menu, icon='play',
                                base_color=(30, 120, 60), hover_color=(50, 170, 90))
         self.btn_exit = Button(cx, 440, 260, 64, "EXIT", self.font_menu, icon='exit',
                                base_color=(120, 40, 40), hover_color=(170, 60, 60))
 
-        # Pause menu
         self.btn_resume   = Button(cx, 250, 280, 60, "RESUME", self.font_menu, icon='play',
                                    base_color=(30, 120, 60), hover_color=(50, 170, 90))
         self.btn_settings = Button(cx, 325, 280, 60, "SETTINGS", self.font_menu, icon='gear')
         self.btn_mainmenu = Button(cx, 400, 280, 60, "MAIN MENU", self.font_menu, icon='home',
                                    base_color=(110, 70, 30), hover_color=(160, 110, 50))
 
-        # Settings menu
         self.slider_music = Slider(cx - 150, 250, 300, "Music Volume", self.font_small,
                                    value=settings.music_volume)
         self.slider_sfx   = Slider(cx - 150, 340, 300, "Sound Effects", self.font_small,
@@ -126,7 +102,6 @@ class Game:
         self.btn_music_toggle = Button(cx, 405, 280, 50, self._music_label(), self.font_small)
         self.btn_back = Button(cx, 470, 200, 54, "BACK", self.font_menu)
 
-        # Game over
         self.btn_retry    = Button(cx, 340, 260, 60, "RETRY", self.font_menu, icon='play',
                                    base_color=(30, 120, 60), hover_color=(50, 170, 90))
         self.btn_go_menu  = Button(cx, 415, 260, 60, "MAIN MENU", self.font_menu, icon='home',
@@ -135,9 +110,6 @@ class Game:
     def _music_label(self):
         return "Music: ON" if settings.music_enabled else "Music: OFF"
 
-    # =========================================================================
-    # Level / run management
-    # =========================================================================
     def start_new_game(self):
         self.score     = 0
         self.coins     = 0
@@ -181,7 +153,6 @@ class Game:
         self.player_group = pygame.sprite.GroupSingle(self.player)
 
     def reset_current_level(self):
-        """Respawn on the same level after a death (keeps score/coins/lives)."""
         self.load_level(self.level_num)
         start_music(self.theme_index())
 
@@ -199,17 +170,10 @@ class Game:
         self.intro_timer = int(FPS * 2.4)
         sfx_level_start()
 
-    # =========================================================================
-    # Collision handling
-    # =========================================================================
     def handle_collisions(self):
         if self.player.is_dead:
             return
 
-        # ── Horizontal tile collisions ─────────────────────────────────────
-        # Skip during the scripted victory walk: the path to the castle is
-        # guaranteed clear, and running horizontal resolution while the player
-        # rests exactly on ground level can "corner-catch" and shove them back.
         self.player.rect.centerx = self.player.x
         if not self.player.victory_walk:
             for tile in pygame.sprite.spritecollide(self.player, self.tile_group, False):
@@ -220,7 +184,6 @@ class Game:
                 self.player.vx = 0
                 self.player.x  = self.player.rect.centerx
 
-        # ── Vertical tile collisions ───────────────────────────────────────
         self.player.y     += self.player.vy
         self.player.rect.y = self.player.y
         self.player.on_ground = False
@@ -236,23 +199,19 @@ class Game:
                 self._trigger_block_hit(tile)
             self.player.y = self.player.rect.y
 
-        # ── Left-edge screen boundary ──────────────────────────────────────
         if self.player.x < self.camera_x + 15:
             self.player.x  = self.camera_x + 15
             self.player.vx = 0
             self.player.rect.centerx = self.player.x
 
-        # ── Fall out of world ──────────────────────────────────────────────
         if self.player.y > SCREEN_HEIGHT + 50:
             self.player.die()
 
-        # ── Spike hazards ──────────────────────────────────────────────────
         if (self.player.invincible_timer <= 0 and not self.player.is_dead
                 and pygame.sprite.spritecollide(self.player, self.hazard_group, False)):
             sfx_hazard()
             self.player.take_damage()
 
-        # ── Pathway coin collection ────────────────────────────────────────
         for coin in pygame.sprite.spritecollide(self.player, self.coin_group, True):
             self.coins += 1
             self.score += 200
@@ -261,7 +220,6 @@ class Game:
                 Particle.create_score(coin.rect.x, coin.rect.y - 10, "200", self.font_hud)
             )
 
-        # ── Item pickups ───────────────────────────────────────────────────
         for item in pygame.sprite.spritecollide(self.player, self.item_group, False):
             if item.state == "active" and item.item_type == 'mushroom':
                 sfx_powerup()
@@ -272,7 +230,6 @@ class Game:
                 )
                 item.kill()
 
-        # ── Enemy collisions ───────────────────────────────────────────────
         for enemy in pygame.sprite.spritecollide(self.player, self.enemy_group, False):
             if enemy.is_dead:
                 continue
@@ -294,7 +251,6 @@ class Game:
                 else:
                     self.player.take_damage()
 
-        # ── Shell kills other enemies ──────────────────────────────────────
         for enemy in self.enemy_group:
             if enemy.enemy_type != 'koopa' or not enemy.in_shell or abs(enemy.vx) < 0.1:
                 continue
@@ -332,9 +288,6 @@ class Game:
             self.particle_group.add(*Particle.create_debris(tile.rect.x, tile.rect.y))
             self.score += 50
 
-    # =========================================================================
-    # Stage clear / flagpole
-    # =========================================================================
     def check_stage_clear(self):
         if self.stage_clear or self.is_boss:
             return
@@ -375,7 +328,6 @@ class Game:
     def _handle_boss_combat(self):
         boss = self.boss
 
-        # Boss defeated -> celebrate once the death animation finishes
         if boss.is_dead:
             if boss.dead_timer <= 0 and not self.stage_clear:
                 self.stage_clear = True
@@ -389,13 +341,11 @@ class Game:
         if self.player.is_dead:
             return
 
-        # Fireball hits
         for fb in pygame.sprite.spritecollide(self.player, self.projectile_group, False):
             if self.player.invincible_timer <= 0:
                 self.player.take_damage()
             fb.kill()
 
-        # Player vs boss body
         if self.player.rect.colliderect(boss.rect):
             stomped = (self.player.vy > 0
                        and self.player.rect.bottom < boss.rect.centery + 6)
@@ -420,9 +370,6 @@ class Game:
         save_high_score(self.high_score)
         self.state = GAMEOVER
 
-    # =========================================================================
-    # Update (gameplay)
-    # =========================================================================
     def update_playing(self):
         if not self.stage_clear and not self.player.is_dead:
             self.time_tick_counter += 1
@@ -434,7 +381,6 @@ class Game:
 
         self.player_group.update()
 
-        # Scroll camera
         if self.player.x > self.camera_x + SCREEN_WIDTH * 0.45 and not self.stage_clear:
             self.camera_x = min(
                 self.player.x - SCREEN_WIDTH * 0.45,
@@ -455,7 +401,6 @@ class Game:
         self.handle_collisions()
         self.check_stage_clear()
 
-        # Track best score live
         if self.score > self.high_score:
             self.high_score = self.score
 
@@ -469,7 +414,6 @@ class Game:
                     self.reset_current_level()
 
     def update_clear(self):
-        # Keep the world lively: particles + a steady stream of fireworks.
         self.particle_group.update()
         self.firework_cd -= 1
         if self.firework_cd <= 0:
@@ -483,26 +427,20 @@ class Game:
         if self.clear_timer <= 0:
             self.next_level()
 
-    # =========================================================================
-    # Background (themed parallax)
-    # =========================================================================
     def _draw_background(self, cam):
         th = self.theme
 
-        # Sky gradient
         draw_vertical_gradient(self.screen, (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT),
                                th['sky_top'], th['sky_bottom'])
 
         ticks = pygame.time.get_ticks()
 
-        # Stars (night themes)
         if th['night']:
             for sx, sy, b in self.stars:
                 tw = 0.5 + 0.5 * math.sin(ticks * 0.002 + sx)
                 v = int(150 + 105 * b * tw)
                 self.screen.fill((v, v, min(255, v + 20)), (sx, sy, 2, 2))
 
-        # Sun / moon
         sun_color = th['sun']
         if th['night']:
             pygame.draw.circle(self.screen, sun_color, (SCREEN_WIDTH - 120, 110), 42)
@@ -513,7 +451,6 @@ class Game:
                 pygame.draw.circle(glow, (*sun_color, alpha), (rad, rad), rad)
                 self.screen.blit(glow, (SCREEN_WIDTH - 120 - rad, 110 - rad))
 
-        # Far mountains (parallax 0.2)
         mcam = cam * 0.2
         mcolor = th['mountain']
         for mx in range(-200, self.level_width + 400, 420):
@@ -525,7 +462,6 @@ class Game:
                                 [(hx + 170, 290), (hx + 210, 250), (hx + 250, 290),
                                  (hx + 230, 305), (hx + 190, 305)])
 
-        # Hills (parallax 0.3)
         hcam = cam * 0.3
         for hill_x in range(-100, self.level_width + 200, 600):
             hx = hill_x - hcam
@@ -534,7 +470,6 @@ class Game:
             pygame.draw.polygon(self.screen, th['hill'],
                                 [(hx + 30, 520), (hx + 160, 340), (hx + 290, 520)])
 
-        # Clouds (parallax 0.1 + slow drift)
         drift = ticks * 0.012
         for i, (cxp, cyp, scl) in enumerate(self.clouds):
             cxw = (cxp + drift) % (self.level_width + 400)
@@ -548,9 +483,6 @@ class Game:
         pygame.draw.ellipse(self.screen, color, (x + w * 0.18, y - h * 0.4, w * 0.7, h))
         pygame.draw.ellipse(self.screen, color, (x + w * 0.45, y - h * 0.2, w * 0.6, h))
 
-    # =========================================================================
-    # HUD & decorations
-    # =========================================================================
     def _draw_hud(self):
         score_text = self.font_hud.render(
             "MARIO      COINS      WORLD      TIME", True, (255, 255, 255)
@@ -573,7 +505,6 @@ class Game:
             self.font_hud.render(f"x {self.lives}", True, (255, 255, 255)),
             (SCREEN_WIDTH - 90, 25),
         )
-        # Esc hint
         hint = self.font_small.render("Esc = Pause", True, (255, 255, 255))
         self.screen.blit(hint, (SCREEN_WIDTH - 110, 52))
 
@@ -627,9 +558,6 @@ class Game:
         hp_txt = self.font_small.render(f"{boss.hp}/{boss.max_hp}", True, (255, 255, 255))
         self.screen.blit(hp_txt, (x + bar_w // 2 - hp_txt.get_width() // 2, y))
 
-    # =========================================================================
-    # Overlays / menus
-    # =========================================================================
     def _dim(self, alpha=150):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, alpha))
@@ -637,7 +565,6 @@ class Game:
 
     def _draw_title_banner(self, text, y, color=(255, 220, 0), big=True):
         font = self.font_big if big else self.font_title
-        # shadow
         shadow = font.render(text, True, (0, 0, 0))
         main   = font.render(text, True, color)
         self.screen.blit(shadow, (SCREEN_WIDTH // 2 - main.get_width() // 2 + 4, y + 4))
@@ -682,7 +609,6 @@ class Game:
         lvl = self.font_menu.render(f"Level {self.level_num}", True, (255, 255, 255))
         self.screen.blit(lvl, (SCREEN_WIDTH // 2 - lvl.get_width() // 2, 340))
 
-        # Lives readout with a small Mario icon
         icon = pygame.transform.scale(self.sprites.player_small['idle'], (28, 34))
         self.screen.blit(icon, (SCREEN_WIDTH // 2 - 40, 400))
         lv = self.font_menu.render(f"x  {self.lives}", True, (255, 255, 255))
@@ -741,9 +667,6 @@ class Game:
             b.update(mp)
             b.draw(self.screen)
 
-    # =========================================================================
-    # Event handling per state
-    # =========================================================================
     def _handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -850,9 +773,6 @@ class Game:
         pygame.quit()
         sys.exit()
 
-    # =========================================================================
-    # Main loop
-    # =========================================================================
     def run(self):
         while True:
             self._handle_events()
@@ -868,7 +788,6 @@ class Game:
                     self.state = PLAYING
                     start_music(self.theme_index())
 
-            # Draw current state
             if self.state == MENU:
                 self.draw_menu()
             elif self.state == INTRO:

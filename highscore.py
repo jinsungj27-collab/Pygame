@@ -1,7 +1,3 @@
-"""
-Tiny persistent high-score store. Saves to highscore.json next to the game
-files. All operations fail silently so a read-only disk never crashes the game.
-"""
 import json
 import os
 
