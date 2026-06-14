@@ -1,6 +1,6 @@
-# Antigravity Super Mario Bros - Enhanced Edition v2.1.0
+# Super Jin - Enhanced Edition v2.1.0
 
-A fully-featured 2D platformer inspired by Super Mario Bros, built from scratch in Python with pygame. Features endless procedurally-generated levels, boss battles, themed parallax backgrounds, a complete menu/settings system, and persistent high scores — all with zero external assets (graphics and music are synthesized at runtime).
+A fully-featured 2D platformer built from scratch in Python with pygame. Features endless procedurally-generated levels with parkour, boss battles, flying enemies, collectible coins, themed parallax backgrounds, a complete menu/settings system, and persistent high scores — all with zero external assets (graphics and music are synthesized at runtime).
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![pygame](https://img.shields.io/badge/pygame--ce-2.5%2B-green)
@@ -12,11 +12,14 @@ A fully-featured 2D platformer inspired by Super Mario Bros, built from scratch 
 
 ### 🎮 Gameplay
 - **Endless Progression**: Procedurally-generated levels that scale in difficulty as you advance
+- **Long Parkour Runways**: Levels are roughly twice as long as a classic stage and grow each level, filled with floating platforms, gaps, and pipes to traverse
 - **Boss Battles**: Fight a unique boss every 4th level (levels 4, 8, 12...) in enclosed arenas
+- **Collectible Coins**: Coins scattered along the path — many placed in hard-to-reach spots (over gaps, atop parkour platforms) — boost your score
+- **Enemies**: Goombas, Koopas (with kickable shells), and flying **Birds** you must duck under, jump over, or stomp
 - **Dual Control Schemes**: Play with Arrow keys or WASD (both work simultaneously)
-- **Dynamic Obstacles**: Gaps, spikes, enemies (Goombas, Koopas), and environmental hazards
+- **Dynamic Obstacles**: Gaps, spikes, pipes, and environmental hazards
 - **Power-ups**: Mushrooms for growth, coins for score, block-breaking when big
-- **Responsive Movement**: Coyote time, buffered jumps, double-jump, variable jump height
+- **Responsive Movement**: Coyote time, buffered jumps, double-jump, variable jump height, and a crouch that shrinks your hitbox to slip under birds
 
 ### 🎨 Graphics & Presentation
 - **4 Themed Worlds**: Overworld, Sunset, Night, and Cavern — each with unique palettes
@@ -58,10 +61,11 @@ A fully-featured 2D platformer inspired by Super Mario Bros, built from scratch 
 ├── ui.py                   # Button and Slider widgets
 ├── entities/
 │   ├── __init__.py
-│   ├── player.py           # Player movement, jump, animation
-│   ├── enemy.py            # Goomba, Koopa (shell kick)
+│   ├── player.py           # Player movement, jump, duck (shrinks hitbox), animation
+│   ├── enemy.py            # Goomba, Koopa (shell kick), Bird (flying enemy)
 │   ├── boss.py             # Boss + Fireball projectiles
-│   ├── item.py             # Mushroom, coin
+│   ├── item.py             # Mushroom, coin (from blocks)
+│   ├── coin.py             # Collectible pathway coins
 │   ├── tile.py             # Ground, brick, question block, pipe, spike
 │   └── particle.py         # Debris, score popups, fireworks
 ├── Play_Mario.bat          # Windows launcher script
@@ -122,8 +126,10 @@ No additional assets are required — all graphics and audio are generated at ru
 
 ### Tips
 - **Stomp enemies** by landing on their heads (jump + fall onto them)
+- **Duck** (`S` / `↓`) to slip under low-flying birds, or jump over / stomp them
 - **Mushrooms** make you big (allowing you to break bricks and take one hit)
 - **Koopa shells** can be kicked to take out other enemies
+- **Collect coins** along the path for extra points — the trickier ones over gaps and on parkour platforms are worth chasing for a high score
 - **Boss fireballs** damage you — dodge or jump over them
 - **Gaps** require precise jumps — use the double-jump if needed
 - **Spikes** hurt you even when big — avoid them entirely
@@ -156,6 +162,11 @@ Planned features: checkpoints, more power-ups, additional enemy types, fire-flow
 ## 📜 Version History
 
 ### v2.1.0 (Current)
+- Renamed to **Super Jin**
+- Runways roughly doubled in length with procedural **parkour** (floating platforms)
+- **Collectible coins** along the path, many in hard-to-reach spots, worth score
+- New flying **Bird** enemy — duck under it, jump over, or stomp it (makes the crouch useful)
+- Crouch now shrinks the player hitbox to slip under birds
 - Boss battles every 4th level with HP scaling
 - Persistent high score with new record detection
 - WASD control scheme added

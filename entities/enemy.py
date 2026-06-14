@@ -1,3 +1,5 @@
+import math
+
 import pygame
 from constants import GRAVITY, TERMINAL_VELOCITY
 from sounds import sfx_stomp
@@ -22,6 +24,22 @@ class Enemy(pygame.sprite.Sprite):
         self.anim_frame = 0.0
         self.anim_speed = 0.1
 
+        # ── Bird-specific flying state ──────────────────────────────────────
+        self.is_bird = (enemy_type == 'bird')
+        if self.is_bird:
+            self.vx = -2.0
+            self.fly_y = float(y)
+            self.bob_t = float(x) * 0.01
+            self.patrol_min = x - 200
+            self.patrol_max = x + 200
+            self.anim_speed = 0.25
+            self.image = self.sprites.bird['fly1']
+            self.rect = self.image.get_rect()
+            self.rect.x = x
+            self.rect.y = y
+            self.rect.height = 30
+            return
+
         self.image = (
             self.sprites.goomba['walk1']
             if self.enemy_type == 'goomba'
@@ -36,6 +54,10 @@ class Enemy(pygame.sprite.Sprite):
 
     # ── Physics update ────────────────────────────────────────────────────────
     def update(self, tiles):
+        if self.is_bird:
+            self._update_bird()
+            return
+
         if self.is_dead and self.enemy_type == 'goomba':
             self.dead_timer -= 1
             if self.dead_timer <= 0:
@@ -51,6 +73,32 @@ class Enemy(pygame.sprite.Sprite):
         self.y      += self.vy
         self.rect.y  = self.y
         self._collide_tiles(tiles, horizontal=False)
+
+        self.anim_frame += self.anim_speed
+        self.update_image()
+
+    def _update_bird(self):
+        # Flying enemy: no gravity, horizontal patrol with a gentle vertical bob.
+        if self.is_dead:
+            self.vy += GRAVITY
+            self.y += self.vy
+            self.rect.y = int(self.y)
+            self.dead_timer -= 1
+            if self.dead_timer <= 0 or self.y > 700:
+                self.kill()
+            return
+
+        self.x += self.vx
+        if self.x <= self.patrol_min:
+            self.x = self.patrol_min
+            self.vx = abs(self.vx)
+        elif self.x >= self.patrol_max:
+            self.x = self.patrol_max
+            self.vx = -abs(self.vx)
+        self.rect.x = int(self.x)
+
+        self.bob_t += 0.12
+        self.rect.y = int(self.fly_y + math.sin(self.bob_t) * 5)
 
         self.anim_frame += self.anim_speed
         self.update_image()
@@ -79,6 +127,13 @@ class Enemy(pygame.sprite.Sprite):
     # ── Animation ─────────────────────────────────────────────────────────────
     def update_image(self):
         frame = int(self.anim_frame) % 2
+        if self.is_bird:
+            if self.vx > 0:   # moving right -> use flipped frames
+                base = self.sprites.bird['fly1_r'] if frame == 0 else self.sprites.bird['fly2_r']
+            else:
+                base = self.sprites.bird['fly1'] if frame == 0 else self.sprites.bird['fly2']
+            self.image = base
+            return
         if self.enemy_type == 'goomba':
             if self.is_dead:
                 self.image = self.sprites.goomba['squished']
@@ -102,6 +157,12 @@ class Enemy(pygame.sprite.Sprite):
     # ── Combat ────────────────────────────────────────────────────────────────
     def squish(self):
         sfx_stomp()
+        if self.is_bird:
+            self.is_dead    = True
+            self.vx         = 0
+            self.vy         = 2
+            self.dead_timer = 60
+            return
         if self.enemy_type == 'goomba':
             self.is_dead    = True
             self.vx         = 0

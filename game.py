@@ -29,7 +29,7 @@ import sounds
 from sounds import (
     play_coin_second_tone, sfx_powerup, sfx_powerup_spawn, sfx_stomp,
     sfx_clear, sfx_menu_select, sfx_pause, sfx_unpause, sfx_level_start,
-    sfx_hazard, sfx_firework, start_music, stop_music, update_music_volume,
+    sfx_hazard, sfx_firework, sfx_coin, start_music, stop_music, update_music_volume,
 )
 from entities import Player, Enemy, Item, Tile, Particle
 
@@ -51,7 +51,7 @@ class Game:
             pass
 
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Antigravity Super Mario Bros  v2.1.0")
+        pygame.display.set_caption("Super Jin  v2.1.0")
         self.clock = pygame.time.Clock()
 
         self.font_hud   = pygame.font.Font(None, 24); self.font_hud.set_bold(True)
@@ -85,6 +85,7 @@ class Game:
         self.is_boss = False
         self.boss = None
         self.projectile_group = pygame.sprite.Group()
+        self.coin_group = pygame.sprite.Group()
         self.cleared_boss = False
 
         # Timers for transitions
@@ -173,6 +174,7 @@ class Game:
         self.item_group     = pygame.sprite.Group()
         self.particle_group = pygame.sprite.Group()
         self.projectile_group = pygame.sprite.Group()
+        self.coin_group     = self.level.coin_group
         self.boss = self.level.boss
 
         self.player = Player(100, 300, self.sprites)
@@ -249,6 +251,15 @@ class Game:
                 and pygame.sprite.spritecollide(self.player, self.hazard_group, False)):
             sfx_hazard()
             self.player.take_damage()
+
+        # ── Pathway coin collection ────────────────────────────────────────
+        for coin in pygame.sprite.spritecollide(self.player, self.coin_group, True):
+            self.coins += 1
+            self.score += 200
+            sfx_coin()
+            self.particle_group.add(
+                Particle.create_score(coin.rect.x, coin.rect.y - 10, "200", self.font_hud)
+            )
 
         # ── Item pickups ───────────────────────────────────────────────────
         for item in pygame.sprite.spritecollide(self.player, self.item_group, False):
@@ -434,6 +445,7 @@ class Game:
         self.item_group.update(self.tile_group)
         self.enemy_group.update(self.tile_group)
         self.particle_group.update()
+        self.coin_group.update()
 
         if self.is_boss and self.boss is not None:
             self.boss.update(self.tile_group, self.projectile_group, self.player)
@@ -586,6 +598,7 @@ class Game:
             self._draw_flagpole_and_castle()
         for tile     in self.tile_group:     tile.draw(self.screen, self.camera_x)
         for hazard   in self.hazard_group:   hazard.draw(self.screen, self.camera_x)
+        for coin     in self.coin_group:     coin.draw(self.screen, self.camera_x)
         for item     in self.item_group:     item.draw(self.screen, self.camera_x)
         for enemy    in self.enemy_group:    enemy.draw(self.screen, self.camera_x)
         if self.is_boss and self.boss is not None:
@@ -636,8 +649,8 @@ class Game:
         self._dim(60)
 
         bob = math.sin(pygame.time.get_ticks() * 0.003) * 8
-        self._draw_title_banner("ANTIGRAVITY", 90 + int(bob), color=(255, 70, 70))
-        self._draw_title_banner("MARIO BROS", 165 + int(bob), color=(255, 220, 0))
+        self._draw_title_banner("SUPER", 90 + int(bob), color=(255, 70, 70))
+        self._draw_title_banner("JIN", 165 + int(bob), color=(255, 220, 0))
 
         sub = self.font_small.render(
             "Arrows / WASD = Move    Space/W/Up = Jump    S/Down = Duck", True, (235, 235, 245))

@@ -25,6 +25,8 @@ COLOR_MAP = {
     'd': (80,  80,  80),        # Dark Gray  (Solid block)
     'l': (160, 160, 160),       # Light Gray (Solid block highlight)
     'p': (200, 80,  60),        # Terracotta (Brick main)
+    'v': (150, 90,  220),       # Purple (Bird body)
+    'a': (90,  50,  150),       # Dark purple (Bird wing shadow)
 }
 
 SKY_BLUE      = (107, 140, 255)

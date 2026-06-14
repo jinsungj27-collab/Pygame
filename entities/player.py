@@ -63,9 +63,13 @@ class Player(pygame.sprite.Sprite):
         old_bottom = self.y + (80 if self.is_big else 40)
         self.rect  = self.image.get_rect()
         self.rect.width  = 30
-        self.rect.height = 70 if self.is_big else 35
-        if self.is_ducking and self.is_big:
-            self.rect.height = 40
+        if self.is_ducking:
+            # Crouch low enough to slip under flying enemies (both sizes).
+            self.rect.height = 20
+        elif self.is_big:
+            self.rect.height = 70
+        else:
+            self.rect.height = 35
         self.rect.bottom  = old_bottom
         self.rect.centerx = self.x
 

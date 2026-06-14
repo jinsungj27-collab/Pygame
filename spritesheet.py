@@ -76,6 +76,28 @@ def _make_boss(frame):
     return s
 
 
+def _make_bird(frame):
+    """Draw a small flying bird (facing LEFT) with pygame primitives."""
+    W, H = 46, 32
+    s = pygame.Surface((W, H), pygame.SRCALPHA)
+    body  = (150, 90, 220); wing = (108, 58, 178)
+    belly = (240, 240, 255); beak = (245, 160, 40); eye = (18, 18, 18)
+
+    pygame.draw.polygon(s, wing, [(32, 15), (46, 7), (45, 22)])     # tail (right)
+    pygame.draw.ellipse(s, body, (8, 11, 30, 16))                  # body
+    pygame.draw.circle(s, body, (15, 15), 9)                       # head
+    pygame.draw.ellipse(s, belly, (15, 17, 18, 9))                 # belly
+    pygame.draw.polygon(s, beak, [(1, 15), (11, 11), (11, 19)])    # beak (left)
+    pygame.draw.circle(s, eye, (13, 13), 2)                        # eye
+    if frame == 0:
+        pygame.draw.polygon(s, wing, [(18, 13), (27, 0), (35, 13)])   # wing up
+        pygame.draw.polygon(s, body, [(20, 13), (27, 4), (32, 13)])
+    else:
+        pygame.draw.polygon(s, wing, [(18, 17), (27, 31), (35, 17)])  # wing down
+        pygame.draw.polygon(s, body, [(20, 17), (27, 27), (32, 17)])
+    return s
+
+
 class SpriteSheet:
     def __init__(self):
         # ── Player ────────────────────────────────────────────────────────────
@@ -145,4 +167,12 @@ class SpriteSheet:
         self.boss = {
             'walk1': _make_boss(0),
             'walk2': _make_boss(1),
+        }
+
+        # ── Bird enemy (procedurally drawn, faces left) ─────────────────────────
+        self.bird = {
+            'fly1':   _make_bird(0),
+            'fly2':   _make_bird(1),
+            'fly1_r': pygame.transform.flip(_make_bird(0), True, False),
+            'fly2_r': pygame.transform.flip(_make_bird(1), True, False),
         }

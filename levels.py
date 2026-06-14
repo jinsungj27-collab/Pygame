@@ -3,16 +3,20 @@ Procedural, difficulty-scaling level builder.
 
 build_level(level_num, sprites) returns a LevelData object holding fully
 populated sprite groups plus level metadata. Difficulty rises with level_num:
-more (and faster) enemies, more gaps, and spike hazards from level 2 onward.
+more (and faster) enemies, more gaps, spikes, flying birds, parkour platforms,
+and harder-to-reach coins.
 
-Geometry bounds (level width, flag, castle) are kept consistent across levels
-so the flag-slide / victory-walk logic in Game stays simple and robust, while
-the *interior* obstacles change and intensify each level.
+The runway is roughly twice as long as the classic single-screen layout and
+grows further each level, generated as a sequence of "feature" segments
+(flat stretches, gaps, pipes, parkour, spikes, birds, coin lines).
+
+Geometry bounds (flag, castle) are derived from the level length so the
+flag-slide / victory-walk logic in Game stays simple and robust.
 """
 import random
 
 from constants import TILE_SIZE, SCREEN_WIDTH
-from entities import Enemy, Tile, Boss
+from entities import Enemy, Tile, Boss, Coin
 
 # Themes cycle as the player advances. Each theme drives the background palette
 # and the background-music track index.
@@ -53,6 +57,7 @@ class LevelData:
         self.tile_group   = None
         self.hazard_group = None
         self.enemy_group  = None
+        self.coin_group   = None
         self.level_width  = 3800
         self.flagpole_x   = 3400
         self.flagpole_y   = TILE_SIZE * 3
@@ -80,6 +85,72 @@ def _create_staircase(start_col, floor_row, size, ascends_right, layout):
             layout[(col, floor_row - h)] = 'S'
 
 
+def _add_coin(coins, col, row):
+    coins.append((col * TILE_SIZE + TILE_SIZE // 2, row * TILE_SIZE + TILE_SIZE // 2))
+
+
+def _place_feature(feat, col, end, layout, gap_cols, spike_cols,
+                   coins, enemy_spawns, rng, diff):
+    """Place one feature starting at `col`; return the next free column."""
+    koopa_chance = min(0.20 + 0.06 * diff, 0.5)
+
+    if feat == 'flat':
+        length = rng.randint(4, 7)
+        if rng.random() < 0.6:
+            etype = 'koopa' if rng.random() < koopa_chance else 'goomba'
+            enemy_spawns.append(((col + length // 2) * TILE_SIZE, etype))
+        return col + length + 1
+
+    if feat == 'coin_line':
+        n = rng.randint(3, 5)
+        for i in range(n):
+            if col + i < end:
+                _add_coin(coins, col + i, 11)   # row 11 -> a small hop to grab
+        return col + n + 1
+
+    if feat == 'pipe':
+        pr = rng.choice([10, 11])
+        _create_pipe(col, pr, layout)
+        _add_coin(coins, col, pr - 2)
+        _add_coin(coins, col + 1, pr - 2)
+        if rng.random() < 0.5:
+            enemy_spawns.append(((col + 3) * TILE_SIZE, 'goomba'))
+        return col + 4
+
+    if feat == 'gap':
+        gw = 2 if diff < 2 else rng.choice([2, 3])
+        for i in range(gw):
+            gap_cols.add(col + i)
+        for i in range(gw):                      # coin arc to grab mid-jump
+            _add_coin(coins, col + i, 9)
+        return col + gw + 2
+
+    if feat == 'parkour':
+        n = rng.randint(2, 4)
+        base_row = 10
+        for i in range(n):
+            prow = max(6, base_row - i)
+            pcol = col + i * 2
+            layout[(pcol,     prow)] = 'S'
+            layout[(pcol + 1, prow)] = 'S'
+            _add_coin(coins, pcol, prow - 1)     # coin atop each platform
+        return col + n * 2 + 2
+
+    if feat == 'spikes':
+        w = rng.choice([1, 2])
+        for i in range(w):
+            spike_cols.add(col + i)
+        return col + w + 3                        # buffer so it stays jumpable
+
+    if feat == 'bird':
+        enemy_spawns.append(((col + 2) * TILE_SIZE, 'bird'))
+        if rng.random() < 0.4:
+            enemy_spawns.append(((col + 4) * TILE_SIZE, 'goomba'))
+        return col + 6
+
+    return col + 4
+
+
 def build_level(level_num, sprites):
     """Construct and return a fully-populated LevelData for the given level."""
     import pygame
@@ -89,94 +160,60 @@ def build_level(level_num, sprites):
     data.theme_index = (level_num - 1) % len(THEMES)
     data.world_name  = f"{((level_num - 1) // 4) + 1}-{((level_num - 1) % 4) + 1}"
 
-    # Difficulty knobs ------------------------------------------------------
     diff = level_num - 1
     enemy_speed_mult = 1.0 + 0.12 * diff
-    num_enemies      = min(6 + 2 * diff, 22)
-    num_gaps         = min(diff, 5)            # gaps start at level 2
-    gap_width        = 2 if level_num < 3 else 3
-    num_spike_sets   = min(max(diff - 1, 0), 5)  # spikes start at level 3
-    data.start_timer = max(250, 400 - 20 * diff)
+
+    # Runway is ~2x the classic length and grows each level
+    COLS = min(190 + 14 * diff, 300)
+    data.level_width = COLS * TILE_SIZE
+
+    flag_col = COLS - 9
+    data.flagpole_x = flag_col * TILE_SIZE
+    data.flagpole_y = TILE_SIZE * 3
+    data.castle_x   = (flag_col + 4) * TILE_SIZE
+    data.start_timer = max(300, int(COLS * 2.2) - 8 * diff)
+
+    SAFE_START = 11
+    SAFE_END   = flag_col - 2
 
     tile_group   = pygame.sprite.Group()
     hazard_group = pygame.sprite.Group()
     enemy_group  = pygame.sprite.Group()
-
-    COLS = 95   # 95 * 40 = 3800
-    SAFE_START = 11      # columns of guaranteed ground after spawn
-    SAFE_END   = 86      # ground guaranteed up to flag foundation
-
-    # ── Decide gap positions (each gap = contiguous missing-ground columns) ──
-    gap_cols = set()
-    forbidden = set(range(0, SAFE_START)) | set(range(SAFE_END, COLS))
-    attempts = 0
-    placed_gaps = []
-    while len(placed_gaps) < num_gaps and attempts < 60:
-        attempts += 1
-        start = rng.randint(SAFE_START + 2, SAFE_END - gap_width - 4)
-        span = set(range(start - 1, start + gap_width + 1))  # buffer around gap
-        if span & forbidden or span & gap_cols:
-            continue
-        for c in range(start, start + gap_width):
-            gap_cols.add(c)
-        # keep a margin so gaps don't touch each other
-        forbidden |= set(range(start - 3, start + gap_width + 3))
-        placed_gaps.append((start, gap_width))
+    coin_group   = pygame.sprite.Group()
 
     layout = {}
+    gap_cols = set()
+    spike_cols = set()
+    coins = []
+    enemy_spawns = []
+
+    # ── Start area: early power-up + coins ──────────────────────────────────
+    for (c, r, k) in [(7, 9, 'Q'), (8, 9, 'M'), (9, 9, 'Q')]:
+        layout[(c, r)] = k
+
+    # ── Segment-based middle generation ─────────────────────────────────────
+    col = SAFE_START + 4
+    end = SAFE_END - 6
+    while col < end:
+        choices = ['flat', 'flat', 'coin_line', 'pipe', 'parkour', 'gap', 'bird']
+        if diff >= 2:
+            choices += ['spikes', 'gap', 'parkour']
+        if diff >= 4:
+            choices += ['bird', 'gap', 'spikes']
+        feat = rng.choice(choices)
+        col = _place_feature(feat, col, end, layout, gap_cols, spike_cols,
+                             coins, enemy_spawns, rng, diff)
+
+    # ── End staircase before the flag (kept clear of the flag column) ───────
+    _create_staircase(flag_col - 7, 12, size=min(4 + diff, 6),
+                      ascends_right=True, layout=layout)
 
     # ── Ground rows (skip gap columns) ──────────────────────────────────────
-    for col in range(COLS):
-        if col in gap_cols:
+    for c in range(COLS):
+        if c in gap_cols:
             continue
-        layout[(col, 13)] = 'G'
-        layout[(col, 14)] = 'G'
-
-    # ── Flag approach: keep cols 84..94 flat ground so the victory walk into
-    #    the castle is never blocked. (No raised foundation wall here.)
-    # (ground already laid above; nothing extra needed)
-
-    # ── Floating block clusters (coins / power-ups) ─────────────────────────
-    block_rows = [
-        (8, 9, 'B'), (9, 9, 'Q'), (10, 9, 'B'),
-        (11, 9, 'M'), (12, 9, 'B'), (10, 5, 'Q'),
-        (20, 9, 'Q'),
-        (39, 9, 'B'), (40, 9, 'Q'), (41, 9, 'B'), (42, 9, 'B'),
-        (60, 9, 'B'), (61, 9, 'Q'), (62, 9, 'Q'), (63, 9, 'B'),
-    ]
-    for col, row, kind in block_rows:
-        if col in gap_cols:
-            continue
-        layout[(col, row)] = kind
-
-    for col in range(67, 72):
-        if col not in gap_cols:
-            layout[(col, 5)] = 'B'
-
-    # ── Pipes (count scales a little with level) ────────────────────────────
-    pipe_candidates = [(18, 11), (25, 10), (34, 11), (48, 11), (70, 10)]
-    num_pipes = min(3 + diff, len(pipe_candidates))
-    for (pc, pr) in pipe_candidates[:num_pipes]:
-        if pc in gap_cols or (pc + 1) in gap_cols:
-            continue
-        _create_pipe(pc, pr, layout)
-
-    # ── Staircases (kept clear of the flag at col ~85) ──────────────────────
-    _create_staircase(46, 12, size=4, ascends_right=True, layout=layout)
-    _create_staircase(78, 12, size=min(4 + diff, 6), ascends_right=True, layout=layout)
-
-    # ── Spike hazards on safe ground ────────────────────────────────────────
-    spike_cols = set()
-    sp_attempts = 0
-    while len(spike_cols) < num_spike_sets and sp_attempts < 50:
-        sp_attempts += 1
-        c = rng.randint(SAFE_START + 4, SAFE_END - 4)
-        # spikes must sit on solid ground (col 13 present) and clear of blocks
-        if c in gap_cols or (c, 13) not in layout or (c, 12) in layout:
-            continue
-        if any(abs(c - s) < 4 for s in spike_cols):
-            continue
-        spike_cols.add(c)
+        layout[(c, 13)] = 'G'
+        layout[(c, 14)] = 'G'
 
     # ── Instantiate solid tiles ─────────────────────────────────────────────
     tile_map = {
@@ -186,42 +223,42 @@ def build_level(level_num, sprites):
         'Q': ('question', 'coin'),
         'M': ('question', 'mushroom'),
     }
-    for (col, row), kind in layout.items():
-        x, y = col * TILE_SIZE, row * TILE_SIZE
+    for (c, r), kind in layout.items():
+        x, y = c * TILE_SIZE, r * TILE_SIZE
         if kind in tile_map:
             tile_type, item = tile_map[kind]
             tile_group.add(Tile(x, y, tile_type, sprites, contains_item=item))
         elif kind.startswith('pipe_'):
             tile_group.add(Tile(x, y, kind, sprites))
 
-    # ── Instantiate spike hazards (sit on row 12, atop ground row 13) ───────
+    # ── Spikes (only where solid ground exists and nothing blocks row 12) ───
     for c in spike_cols:
+        if c in gap_cols or (c, 12) in layout:
+            continue
         hazard_group.add(Tile(c * TILE_SIZE, 12 * TILE_SIZE, 'spike', sprites))
 
+    # ── Coins ───────────────────────────────────────────────────────────────
+    for (cx, cy) in coins:
+        coin_group.add(Coin(cx, cy, sprites))
+
     # ── Enemies ─────────────────────────────────────────────────────────────
-    walkable = [c for c in range(SAFE_START + 3, SAFE_END - 2)
-                if c not in gap_cols and c not in spike_cols]
-    rng.shuffle(walkable)
-    koopa_chance = min(0.25 + 0.06 * diff, 0.6)
-    used = []
-    for c in walkable:
-        if len(used) >= num_enemies:
-            break
-        if any(abs(c - u) < 2 for u in used):
-            continue
-        used.append(c)
-        etype = 'koopa' if rng.random() < koopa_chance else 'goomba'
-        sx = c * TILE_SIZE
-        sy = 480 if etype == 'goomba' else 440
-        e = Enemy(sx, sy, etype, sprites)
-        # scale base patrol speed by difficulty (preserve direction)
-        e.vx = -1.2 * enemy_speed_mult
-        e.shell_speed = 8.0 * enemy_speed_mult
+    for (sx, etype) in enemy_spawns:
+        if etype == 'bird':
+            e = Enemy(sx, 460, 'bird', sprites)
+            e.vx = -2.0 * enemy_speed_mult
+            e.patrol_min = sx - 200
+            e.patrol_max = sx + 200
+        else:
+            sy = 480 if etype == 'goomba' else 440
+            e = Enemy(sx, sy, etype, sprites)
+            e.vx = -1.2 * enemy_speed_mult
+            e.shell_speed = 8.0 * enemy_speed_mult
         enemy_group.add(e)
 
     data.tile_group   = tile_group
     data.hazard_group = hazard_group
     data.enemy_group  = enemy_group
+    data.coin_group   = coin_group
     return data
 
 
@@ -247,6 +284,7 @@ def build_boss_level(level_num, sprites):
     tile_group   = pygame.sprite.Group()
     hazard_group = pygame.sprite.Group()
     enemy_group  = pygame.sprite.Group()
+    coin_group   = pygame.sprite.Group()
 
     COLS = 20   # 20 * 40 = 800
 
@@ -260,11 +298,14 @@ def build_boss_level(level_num, sprites):
         tile_group.add(Tile(0,             r * TILE_SIZE, 'solid', sprites))
         tile_group.add(Tile(19 * TILE_SIZE, r * TILE_SIZE, 'solid', sprites))
 
-    # Two side platforms for tactical jumps
+    # Two side platforms for tactical jumps (+ a coin reward on each)
     for col in (4, 5):
         tile_group.add(Tile(col * TILE_SIZE, 9 * TILE_SIZE, 'solid', sprites))
     for col in (14, 15):
         tile_group.add(Tile(col * TILE_SIZE, 9 * TILE_SIZE, 'solid', sprites))
+    for col in (4, 15):
+        coin_group.add(Coin(col * TILE_SIZE + TILE_SIZE // 2, 8 * TILE_SIZE + TILE_SIZE // 2,
+                            sprites))
 
     # Boss — HP and speed scale each boss round
     hp    = 4 + (boss_round - 1)
@@ -276,4 +317,5 @@ def build_boss_level(level_num, sprites):
     data.tile_group   = tile_group
     data.hazard_group = hazard_group
     data.enemy_group  = enemy_group
+    data.coin_group   = coin_group
     return data
