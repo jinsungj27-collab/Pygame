@@ -90,7 +90,7 @@ def _add_coin(coins, col, row):
 
 
 def _place_feature(feat, col, end, layout, gap_cols, spike_cols,
-                   coins, enemy_spawns, rng, diff):
+                   coins, enemy_spawns, bird_spawns, rng, diff):
     """Place one feature starting at `col`; return the next free column."""
     koopa_chance = min(0.20 + 0.06 * diff, 0.5)
 
@@ -105,7 +105,7 @@ def _place_feature(feat, col, end, layout, gap_cols, spike_cols,
         n = rng.randint(3, 5)
         for i in range(n):
             if col + i < end:
-                _add_coin(coins, col + i, 11)   # row 11 -> a small hop to grab
+                _add_coin(coins, col + i, 12)   # body height -> grab by walking
         return col + n + 1
 
     if feat == 'pipe':
@@ -123,17 +123,35 @@ def _place_feature(feat, col, end, layout, gap_cols, spike_cols,
             gap_cols.add(col + i)
         for i in range(gw):                      # coin arc to grab mid-jump
             _add_coin(coins, col + i, 9)
+        # A sky bird patrolling over the gap on harder levels
+        if diff >= 3 and rng.random() < 0.5:
+            bird_spawns.append({
+                'x': (col + gw // 2) * TILE_SIZE,
+                'y': 7 * TILE_SIZE,
+                'pmin': (col - 3) * TILE_SIZE,
+                'pmax': (col + gw + 3) * TILE_SIZE,
+            })
         return col + gw + 2
 
     if feat == 'parkour':
         n = rng.randint(2, 4)
         base_row = 10
+        top_row = max(6, base_row - (n - 1))
         for i in range(n):
             prow = max(6, base_row - i)
             pcol = col + i * 2
             layout[(pcol,     prow)] = 'S'
             layout[(pcol + 1, prow)] = 'S'
             _add_coin(coins, pcol, prow - 1)     # coin atop each platform
+        # Sky bird synced to the parkour: it patrols across the landing zone at
+        # the height of the platforms, so the player must time their jumps.
+        if rng.random() < 0.75:
+            bird_spawns.append({
+                'x': (col + n) * TILE_SIZE,
+                'y': (top_row - 1) * TILE_SIZE,
+                'pmin': col * TILE_SIZE,
+                'pmax': (col + n * 2 + 1) * TILE_SIZE,
+            })
         return col + n * 2 + 2
 
     if feat == 'spikes':
@@ -141,12 +159,6 @@ def _place_feature(feat, col, end, layout, gap_cols, spike_cols,
         for i in range(w):
             spike_cols.add(col + i)
         return col + w + 3                        # buffer so it stays jumpable
-
-    if feat == 'bird':
-        enemy_spawns.append(((col + 2) * TILE_SIZE, 'bird'))
-        if rng.random() < 0.4:
-            enemy_spawns.append(((col + 4) * TILE_SIZE, 'goomba'))
-        return col + 6
 
     return col + 4
 
@@ -186,6 +198,7 @@ def build_level(level_num, sprites):
     spike_cols = set()
     coins = []
     enemy_spawns = []
+    bird_spawns = []
 
     # ── Start area: early power-up + coins ──────────────────────────────────
     for (c, r, k) in [(7, 9, 'Q'), (8, 9, 'M'), (9, 9, 'Q')]:
@@ -195,14 +208,14 @@ def build_level(level_num, sprites):
     col = SAFE_START + 4
     end = SAFE_END - 6
     while col < end:
-        choices = ['flat', 'flat', 'coin_line', 'pipe', 'parkour', 'gap', 'bird']
+        choices = ['flat', 'flat', 'coin_line', 'pipe', 'parkour', 'gap', 'parkour']
         if diff >= 2:
             choices += ['spikes', 'gap', 'parkour']
         if diff >= 4:
-            choices += ['bird', 'gap', 'spikes']
+            choices += ['gap', 'spikes', 'parkour']
         feat = rng.choice(choices)
         col = _place_feature(feat, col, end, layout, gap_cols, spike_cols,
-                             coins, enemy_spawns, rng, diff)
+                             coins, enemy_spawns, bird_spawns, rng, diff)
 
     # ── End staircase before the flag (kept clear of the flag column) ───────
     _create_staircase(flag_col - 7, 12, size=min(4 + diff, 6),
@@ -241,18 +254,21 @@ def build_level(level_num, sprites):
     for (cx, cy) in coins:
         coin_group.add(Coin(cx, cy, sprites))
 
-    # ── Enemies ─────────────────────────────────────────────────────────────
+    # ── Enemies (ground) ────────────────────────────────────────────────────
     for (sx, etype) in enemy_spawns:
-        if etype == 'bird':
-            e = Enemy(sx, 460, 'bird', sprites)
-            e.vx = -2.0 * enemy_speed_mult
-            e.patrol_min = sx - 200
-            e.patrol_max = sx + 200
-        else:
-            sy = 480 if etype == 'goomba' else 440
-            e = Enemy(sx, sy, etype, sprites)
-            e.vx = -1.2 * enemy_speed_mult
-            e.shell_speed = 8.0 * enemy_speed_mult
+        sy = 480 if etype == 'goomba' else 440
+        e = Enemy(sx, sy, etype, sprites)
+        e.vx = -1.2 * enemy_speed_mult
+        e.shell_speed = 8.0 * enemy_speed_mult
+        enemy_group.add(e)
+
+    # ── Birds (sky, synced to parkour / gaps) ───────────────────────────────
+    for sp in bird_spawns:
+        e = Enemy(sp['x'], sp['y'], 'bird', sprites)
+        e.vx = -2.0 * enemy_speed_mult
+        e.fly_y = float(sp['y'])
+        e.patrol_min = sp['pmin']
+        e.patrol_max = sp['pmax']
         enemy_group.add(e)
 
     data.tile_group   = tile_group

@@ -15,8 +15,8 @@ class Coin(pygame.sprite.Sprite):
         self.anim_frame = random.random() * 2.0
         self.image = sprites.items['coin1']
 
-        # A slightly tighter hitbox than the full sprite, centred on (x, y).
-        self.rect = pygame.Rect(0, 0, 26, 34)
+        # A generous hitbox so simply passing through collects the coin.
+        self.rect = pygame.Rect(0, 0, 34, 42)
         self.rect.center = (int(x), int(y))
 
     def update(self, *args):

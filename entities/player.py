@@ -37,6 +37,8 @@ class Player(pygame.sprite.Sprite):
         self.anim_frame = 0.0
         self.anim_speed = 0.15
 
+        self.fast_fall = False   # set when Down/S held in mid-air
+
         self.update_image()
 
     # ── Sprite selection ──────────────────────────────────────────────────────
@@ -98,12 +100,17 @@ class Player(pygame.sprite.Sprite):
             if abs(self.vx) < 0.1:
                 self.vx = 0.0
 
-        # ── Duck (Down or S) ──────────────────────────────────────────────────
-        if (keys[pygame.K_DOWN] or keys[pygame.K_s]) and self.on_ground:
+        # ── Duck (on ground) / Fast-fall (in air) with Down or S ──────────────
+        duck_held = keys[pygame.K_DOWN] or keys[pygame.K_s]
+        self.fast_fall = False
+        if duck_held and self.on_ground:
             self.is_ducking = True
             self.vx *= 0.5
         else:
             self.is_ducking = False
+            if duck_held and not self.on_ground and self.vy > -3:
+                # Slam downward for a quick, controlled landing.
+                self.fast_fall = True
 
         # ── Jump buffer tick ──────────────────────────────────────────────────
         if self.jump_buffer_timer > 0:
@@ -184,7 +191,11 @@ class Player(pygame.sprite.Sprite):
             self.update_image()
             return
 
-        self.vy = min(self.vy + GRAVITY, TERMINAL_VELOCITY)
+        if self.fast_fall:
+            # Slam downward: skip the normal terminal cap for a fast landing.
+            self.vy = min(self.vy + GRAVITY * 2.2, 22)
+        else:
+            self.vy = min(self.vy + GRAVITY, TERMINAL_VELOCITY)
         self.x += self.vx
         self.rect.centerx = self.x
 
