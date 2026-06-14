@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Start Discord RPC",
+  "description": "Automatically starts the Discord Rich Presence script when you begin using Kiro, so your Discord profile shows \"Using Kiro\" with an elapsed timer.",
+  "version": "1",
+  "when": {
+    "type": "promptSubmit"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "python \"c:\\Users\\jinsu\\OneDrive\\Documents\\2D_pygame.py\\kiro_discord_rpc.py\"",
+    "timeout": 1
+  },
+  "workspaceFolderName": "2D_pygame.py",
+  "shortName": "discord-rpc-start"
+}

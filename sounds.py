@@ -1,0 +1,236 @@
+"""
+Retro synthesised sound effects + background music.
+All audio is generated on the fly using standard Python arrays —
+no audio files needed.
+
+Volumes are scaled by the shared `settings` instance so the in-game
+settings menu can adjust SFX and music live.
+"""
+import array
+import math
+import random
+import pygame
+
+from settings import settings
+
+
+def play_synth_sound(freq_list, duration, wav_type='square', volume=0.08, sample_rate=22050):
+    """
+    Synthesise and play a sound effect from a frequency list.
+    Gracefully does nothing if the pygame mixer is not initialised.
+    The final volume is scaled by settings.sfx_volume.
+    """
+    try:
+        if not pygame.mixer or not pygame.mixer.get_init():
+            return None
+
+        vol = volume * settings.sfx_volume
+        if vol <= 0.0:
+            return None
+
+        num_samples = int(sample_rate * duration)
+        buf = array.array('h', [0] * num_samples)
+
+        for i in range(num_samples):
+            t = i / sample_rate
+            if len(freq_list) == 1:
+                freq = freq_list[0]
+            else:
+                progress = t / duration
+                idx = min(int(progress * (len(freq_list) - 1)), len(freq_list) - 2)
+                t_sub = (progress * (len(freq_list) - 1)) - idx
+                freq = freq_list[idx] * (1 - t_sub) + freq_list[idx + 1] * t_sub
+
+            if wav_type == 'square':
+                val = 1.0 if (t * freq) % 1.0 < 0.5 else -1.0
+            elif wav_type == 'sine':
+                val = math.sin(2 * math.pi * freq * t)
+            elif wav_type == 'triangle':
+                val = 2.0 * abs(2.0 * ((t * freq) % 1.0 - 0.5)) - 1.0
+            elif wav_type == 'noise':
+                val = random.uniform(-1.0, 1.0)
+            else:
+                val = 0.0
+
+            decay = 1.0 - (t / duration)
+            val_int = int(max(-32768, min(32767, val * decay * vol * 32767)))
+            buf[i] = val_int
+
+        sound = pygame.mixer.Sound(buffer=buf)
+        sound.play()
+        return sound
+    except Exception:
+        return None
+
+
+# ── Individual sound effects ───────────────────────────────────────────────────
+
+def sfx_jump():
+    play_synth_sound([160, 680, 820], 0.18, 'square', volume=0.08)
+
+def sfx_coin():
+    play_synth_sound([988], 0.07, 'sine', volume=0.1)
+    pygame.time.set_timer(pygame.USEREVENT + 10, 80)   # second tone via timer
+
+def play_coin_second_tone():
+    play_synth_sound([1318], 0.2, 'sine', volume=0.1)
+
+def sfx_stomp():
+    play_synth_sound([180, 50], 0.12, 'noise', volume=0.18)
+
+def sfx_shrink():
+    play_synth_sound([600, 400, 200, 100], 0.25, 'triangle', volume=0.15)
+
+def sfx_powerup_spawn():
+    play_synth_sound([330, 440, 550, 660], 0.22, 'square', volume=0.07)
+
+def sfx_powerup():
+    play_synth_sound([330, 550, 660, 880, 1100], 0.3, 'square', volume=0.08)
+
+def sfx_block_bump():
+    play_synth_sound([120, 60], 0.1, 'square', volume=0.15)
+
+def sfx_block_break():
+    play_synth_sound([100, 40], 0.15, 'noise', volume=0.2)
+
+def sfx_die():
+    play_synth_sound([500, 400, 300, 200, 100, 50], 0.5, 'square', volume=0.15)
+
+def sfx_clear():
+    play_synth_sound([523, 659, 784, 1046, 784, 1046], 0.6, 'sine', volume=0.1)
+
+# ── New UI / event sounds ──────────────────────────────────────────────────────
+
+def sfx_menu_move():
+    play_synth_sound([440, 660], 0.06, 'square', volume=0.08)
+
+def sfx_menu_select():
+    play_synth_sound([660, 880, 1100], 0.14, 'square', volume=0.1)
+
+def sfx_pause():
+    play_synth_sound([880, 440], 0.12, 'sine', volume=0.1)
+
+def sfx_unpause():
+    play_synth_sound([440, 880], 0.12, 'sine', volume=0.1)
+
+def sfx_level_start():
+    play_synth_sound([523, 659, 784, 1046], 0.4, 'square', volume=0.09)
+
+def sfx_hazard():
+    play_synth_sound([300, 120, 60], 0.2, 'noise', volume=0.16)
+
+def sfx_firework():
+    play_synth_sound([200, 1200], 0.18, 'noise', volume=0.1)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Background music — a looping synthesised melody.
+# ════════════════════════════════════════════════════════════════════════════
+
+# Note name -> frequency (Hz)
+_NOTE_FREQ = {
+    'C3': 130.81, 'D3': 146.83, 'E3': 164.81, 'F3': 174.61, 'G3': 196.00,
+    'A3': 220.00, 'B3': 246.94,
+    'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23, 'G4': 392.00,
+    'A4': 440.00, 'B4': 493.88,
+    'C5': 523.25, 'D5': 587.33, 'E5': 659.25, 'F5': 698.46, 'G5': 783.99,
+    'A5': 880.00, 'B5': 987.77,
+    'R': 0.0,   # rest
+}
+
+# A few cheerful, original loops keyed by theme index so each level type gets
+# its own tune.
+_MELODIES = [
+    # 0 - bright/overworld
+    ['E4', 'E4', 'R', 'E4', 'R', 'C4', 'E4', 'R',
+     'G4', 'R', 'R', 'R', 'G3', 'R', 'R', 'R',
+     'C4', 'R', 'R', 'G3', 'R', 'R', 'E3', 'R',
+     'A3', 'R', 'B3', 'R', 'A3', 'R', 'G3', 'R'],
+    # 1 - sunset / breezy
+    ['A3', 'C4', 'E4', 'A4', 'G4', 'E4', 'C4', 'E4',
+     'F4', 'A4', 'C5', 'A4', 'G4', 'E4', 'C4', 'R',
+     'D4', 'F4', 'A4', 'D5', 'C5', 'A4', 'F4', 'A4',
+     'E4', 'G4', 'B4', 'E5', 'D5', 'B4', 'G4', 'R'],
+    # 2 - night / mysterious
+    ['E3', 'R', 'G3', 'R', 'B3', 'R', 'E4', 'R',
+     'D4', 'R', 'B3', 'R', 'G3', 'R', 'E3', 'R',
+     'A3', 'R', 'C4', 'R', 'E4', 'R', 'A4', 'R',
+     'G4', 'R', 'E4', 'R', 'C4', 'R', 'A3', 'R'],
+    # 3 - cave / tense
+    ['C3', 'E3', 'G3', 'C4', 'B3', 'G3', 'E3', 'C3',
+     'D3', 'F3', 'A3', 'D4', 'C4', 'A3', 'F3', 'D3',
+     'E3', 'G3', 'B3', 'E4', 'D4', 'B3', 'G3', 'E3',
+     'F3', 'A3', 'C4', 'F4', 'E4', 'C4', 'A3', 'F3'],
+]
+
+_music_channel = None
+_music_sounds  = {}   # theme_index -> pygame.Sound (cached)
+
+
+def _build_music_sound(theme_index, sample_rate=22050):
+    """Render a melody loop into a pygame Sound (square lead + soft bass)."""
+    melody = _MELODIES[theme_index % len(_MELODIES)]
+    note_dur = 0.16            # seconds per step
+    total_samples = int(sample_rate * note_dur * len(melody))
+    buf = array.array('h', [0] * total_samples)
+
+    for n, note in enumerate(melody):
+        freq = _NOTE_FREQ.get(note, 0.0)
+        bass = freq / 2.0 if freq > 0 else 0.0
+        start = int(n * note_dur * sample_rate)
+        end   = int((n + 1) * note_dur * sample_rate)
+        for i in range(start, end):
+            t  = (i - start) / sample_rate
+            td = note_dur
+            val = 0.0
+            if freq > 0:
+                # square lead
+                lead = 1.0 if (t * freq) % 1.0 < 0.5 else -1.0
+                # triangle-ish bass
+                bwave = 2.0 * abs(2.0 * ((t * bass) % 1.0 - 0.5)) - 1.0
+                # short attack/decay envelope per note
+                env = min(1.0, (t / 0.02)) * (1.0 - (t / td) * 0.7)
+                val = (lead * 0.5 + bwave * 0.5) * env
+            sample = int(max(-32768, min(32767, val * 0.18 * 32767)))
+            buf[i] = sample
+
+    return pygame.mixer.Sound(buffer=buf)
+
+
+def start_music(theme_index=0):
+    """Start (or restart) the looping background music for a theme."""
+    global _music_channel
+    try:
+        if not pygame.mixer or not pygame.mixer.get_init():
+            return
+        if not settings.music_enabled:
+            stop_music()
+            return
+        if theme_index not in _music_sounds:
+            _music_sounds[theme_index] = _build_music_sound(theme_index)
+        snd = _music_sounds[theme_index]
+        if _music_channel is None:
+            _music_channel = pygame.mixer.Channel(0)
+        _music_channel.stop()
+        _music_channel.set_volume(settings.music_volume)
+        _music_channel.play(snd, loops=-1)
+    except Exception:
+        pass
+
+
+def stop_music():
+    global _music_channel
+    try:
+        if _music_channel is not None:
+            _music_channel.stop()
+    except Exception:
+        pass
+
+
+def update_music_volume():
+    """Push the current settings.music_volume to the playing channel."""
+    try:
+        if _music_channel is not None:
+            _music_channel.set_volume(settings.music_volume if settings.music_enabled else 0.0)
+    except Exception:
+        pass
