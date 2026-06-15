@@ -1,9 +1,9 @@
 import pygame
 from sprites import make_sprite
 from sprites import (
-    SMALL_MARIO_IDLE, SMALL_MARIO_WALK1, SMALL_MARIO_WALK2,
+    SMALL_MARIO_IDLE, SMALL_MARIO_WALK1, SMALL_MARIO_WALK2, SMALL_MARIO_WALK3,
     SMALL_MARIO_JUMP, SMALL_MARIO_DUCK,
-    BIG_MARIO_IDLE, BIG_MARIO_WALK1, BIG_MARIO_WALK2,
+    BIG_MARIO_IDLE, BIG_MARIO_WALK1, BIG_MARIO_WALK2, BIG_MARIO_WALK3,
     BIG_MARIO_JUMP, BIG_MARIO_DUCK,
     GOOMBA_WALK1, GOOMBA_WALK2, GOOMBA_SQUISHED,
     KOOPA_WALK1, KOOPA_WALK2, KOOPA_SHELL,
@@ -94,6 +94,7 @@ class SpriteSheet:
             'idle':  _make(SMALL_MARIO_IDLE),
             'walk1': _make(SMALL_MARIO_WALK1),
             'walk2': _make(SMALL_MARIO_WALK2),
+            'walk3': _make(SMALL_MARIO_WALK3),
             'jump':  _make(SMALL_MARIO_JUMP),
             'duck':  _make(SMALL_MARIO_DUCK),
         }
@@ -101,6 +102,7 @@ class SpriteSheet:
             'idle':  _make(SMALL_MARIO_IDLE,  flip_x=True),
             'walk1': _make(SMALL_MARIO_WALK1, flip_x=True),
             'walk2': _make(SMALL_MARIO_WALK2, flip_x=True),
+            'walk3': _make(SMALL_MARIO_WALK3, flip_x=True),
             'jump':  _make(SMALL_MARIO_JUMP,  flip_x=True),
             'duck':  _make(SMALL_MARIO_DUCK,  flip_x=True),
         }
@@ -108,6 +110,7 @@ class SpriteSheet:
             'idle':  _make(BIG_MARIO_IDLE),
             'walk1': _make(BIG_MARIO_WALK1),
             'walk2': _make(BIG_MARIO_WALK2),
+            'walk3': _make(BIG_MARIO_WALK3),
             'jump':  _make(BIG_MARIO_JUMP),
             'duck':  _make(BIG_MARIO_DUCK),
         }
@@ -115,6 +118,7 @@ class SpriteSheet:
             'idle':  _make(BIG_MARIO_IDLE,  flip_x=True),
             'walk1': _make(BIG_MARIO_WALK1, flip_x=True),
             'walk2': _make(BIG_MARIO_WALK2, flip_x=True),
+            'walk3': _make(BIG_MARIO_WALK3, flip_x=True),
             'jump':  _make(BIG_MARIO_JUMP,  flip_x=True),
             'duck':  _make(BIG_MARIO_DUCK,  flip_x=True),
         }

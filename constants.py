@@ -1,5 +1,29 @@
-SCREEN_WIDTH  = 800
+# The game's layout is designed around a 600px logical height. We keep that
+# height but widen the logical resolution to match the player's monitor aspect
+# ratio, so the game fills the whole screen (no black bars) when shown with the
+# SCALED | FULLSCREEN flags, and the player sees more of the level horizontally.
 SCREEN_HEIGHT = 600
+
+
+def _detect_screen_width():
+    """Pick a logical width that matches the desktop's aspect ratio."""
+    default_width = 1067  # 16:9 fallback at 600px height
+    try:
+        import pygame
+        pygame.display.init()
+        info = pygame.display.Info()
+        dw, dh = info.current_w, info.current_h
+        if dw > 0 and dh > 0:
+            width = round(SCREEN_HEIGHT * dw / dh)
+            # Keep it even and never narrower than the original 4:3 layout.
+            width = max(800, width - (width % 2))
+            return width
+    except Exception:
+        pass
+    return default_width
+
+
+SCREEN_WIDTH = _detect_screen_width()
 FPS           = 60
 
 TILE_SIZE         = 40

@@ -36,8 +36,23 @@ class Game:
         except Exception:
             pass
 
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Super Jin  v2.1.0")
+        # Build the list of display modes the player can choose from in
+        # Settings: fullscreen plus a few windowed sizes that match the
+        # game's aspect ratio (so there's never any distortion).
+        self.display_modes = self._build_display_modes()
+        if settings.display_mode >= len(self.display_modes):
+            settings.display_mode = 0
+
+        # The game always renders onto this fixed-size offscreen surface, then
+        # it gets scaled to fill the actual window/screen. Every draw call uses
+        # self.screen, so the rest of the game is unaware of the real window size.
+        self.window = None
+        self.render = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = self.render
+        self._dst = pygame.Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+        self._scale = 1.0
+        self._apply_display_mode()
+        pygame.display.set_caption("Super Jin  v2.2.0")
         self.clock = pygame.time.Clock()
 
         self.font_hud   = pygame.font.Font(None, 24); self.font_hud.set_bold(True)
@@ -63,6 +78,8 @@ class Game:
         self.stars  = [(random.randint(0, SCREEN_WIDTH), random.randint(0, 360),
                         random.uniform(0.3, 1.0)) for _ in range(70)]
         self.menu_scroll = 0.0
+        # Where the SETTINGS screen should return to (MENU or PAUSED).
+        self.settings_return = MENU
 
         self.theme = THEMES[0]
         self.level_width = 3800
@@ -84,9 +101,11 @@ class Game:
     def _build_ui(self):
         cx = SCREEN_WIDTH // 2
 
-        self.btn_play = Button(cx, 360, 260, 64, "PLAY", self.font_menu, icon='play',
+        self.btn_play = Button(cx, 350, 260, 62, "PLAY", self.font_menu, icon='play',
                                base_color=(30, 120, 60), hover_color=(50, 170, 90))
-        self.btn_exit = Button(cx, 440, 260, 64, "EXIT", self.font_menu, icon='exit',
+        self.btn_menu_settings = Button(cx, 420, 260, 62, "SETTINGS", self.font_menu,
+                                        icon='gear')
+        self.btn_exit = Button(cx, 490, 260, 62, "EXIT", self.font_menu, icon='exit',
                                base_color=(120, 40, 40), hover_color=(170, 60, 60))
 
         self.btn_resume   = Button(cx, 250, 280, 60, "RESUME", self.font_menu, icon='play',
@@ -95,12 +114,13 @@ class Game:
         self.btn_mainmenu = Button(cx, 400, 280, 60, "MAIN MENU", self.font_menu, icon='home',
                                    base_color=(110, 70, 30), hover_color=(160, 110, 50))
 
-        self.slider_music = Slider(cx - 150, 250, 300, "Music Volume", self.font_small,
+        self.slider_music = Slider(cx - 150, 255, 300, "Music Volume", self.font_small,
                                    value=settings.music_volume)
-        self.slider_sfx   = Slider(cx - 150, 340, 300, "Sound Effects", self.font_small,
+        self.slider_sfx   = Slider(cx - 150, 320, 300, "Sound Effects", self.font_small,
                                    value=settings.sfx_volume)
-        self.btn_music_toggle = Button(cx, 405, 280, 50, self._music_label(), self.font_small)
-        self.btn_back = Button(cx, 470, 200, 54, "BACK", self.font_menu)
+        self.btn_music_toggle = Button(cx, 376, 280, 48, self._music_label(), self.font_small)
+        self.btn_display  = Button(cx, 430, 280, 48, self._display_label(), self.font_small)
+        self.btn_back = Button(cx, 492, 200, 54, "BACK", self.font_menu)
 
         self.btn_retry    = Button(cx, 340, 260, 60, "RETRY", self.font_menu, icon='play',
                                    base_color=(30, 120, 60), hover_color=(50, 170, 90))
@@ -109,6 +129,9 @@ class Game:
 
     def _music_label(self):
         return "Music: ON" if settings.music_enabled else "Music: OFF"
+
+    def _display_label(self):
+        return f"Screen: {self.display_modes[settings.display_mode][0]}"
 
     def start_new_game(self):
         self.score     = 0
@@ -149,7 +172,10 @@ class Game:
         self.coin_group     = self.level.coin_group
         self.boss = self.level.boss
 
-        self.player = Player(100, 300, self.sprites)
+        # Spawn standing on the ground (row 13) instead of dropping from the
+        # sky. The sprite is anchored at y + 40, so y = ground_top - 40.
+        spawn_y = 13 * TILE_SIZE - 40
+        self.player = Player(100, spawn_y, self.sprites)
         self.player_group = pygame.sprite.GroupSingle(self.player)
 
     def reset_current_level(self):
@@ -579,20 +605,16 @@ class Game:
         self._draw_title_banner("SUPER", 90 + int(bob), color=(255, 70, 70))
         self._draw_title_banner("JIN", 165 + int(bob), color=(255, 220, 0))
 
-        sub = self.font_small.render(
-            "Arrows / WASD = Move    Space/W/Up = Jump    S/Down = Duck", True, (235, 235, 245))
-        self.screen.blit(sub, (SCREEN_WIDTH // 2 - sub.get_width() // 2, 250))
-
         hs = self.font_menu.render(f"HIGH SCORE  {self.high_score:06d}", True, (255, 220, 90))
-        self.screen.blit(hs, (SCREEN_WIDTH // 2 - hs.get_width() // 2, 290))
+        self.screen.blit(hs, (SCREEN_WIDTH // 2 - hs.get_width() // 2, 270))
 
-        mp = pygame.mouse.get_pos()
-        for b in (self.btn_play, self.btn_exit):
+        mp = self._logical_mouse()
+        for b in (self.btn_play, self.btn_menu_settings, self.btn_exit):
             b.update(mp)
             b.draw(self.screen)
 
-        tip = self.font_small.render("v2.1.0  -  Enhanced Edition", True, (220, 220, 230))
-        self.screen.blit(tip, (SCREEN_WIDTH // 2 - tip.get_width() // 2, 540))
+        tip = self.font_small.render("v2.2.0  -  Enhanced Edition", True, (220, 220, 230))
+        self.screen.blit(tip, (SCREEN_WIDTH // 2 - tip.get_width() // 2, 560))
 
     def draw_intro(self):
         self._draw_background(self.camera_x)
@@ -618,20 +640,37 @@ class Game:
         self._draw_world()
         self._dim(150)
         self._draw_title_banner("PAUSED", 110, color=(255, 255, 255))
-        mp = pygame.mouse.get_pos()
+        mp = self._logical_mouse()
         for b in (self.btn_resume, self.btn_settings, self.btn_mainmenu):
             b.update(mp)
             b.draw(self.screen)
 
     def draw_settings(self):
-        self._draw_world()
+        if self.settings_return == MENU:
+            self._draw_background(self.menu_scroll)
+        else:
+            self._draw_world()
         self._dim(170)
-        self._draw_title_banner("SETTINGS", 110, color=(255, 220, 0))
+        self._draw_title_banner("SETTINGS", 60, color=(255, 220, 0))
+
+        # Controls guide (moved here from the main menu).
+        heading = self.font_menu.render("CONTROLS", True, (255, 255, 255))
+        self.screen.blit(heading, (SCREEN_WIDTH // 2 - heading.get_width() // 2, 130))
+        guide = [
+            "Move:  Left / Right Arrows  or  A / D",
+            "Jump:  Space / Up / W      Duck:  Down / S",
+            "Pause:  Esc        Fullscreen:  F11",
+        ]
+        for i, line in enumerate(guide):
+            txt = self.font_small.render(line, True, (225, 230, 245))
+            self.screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 168 + i * 24))
+
         self.slider_music.draw(self.screen)
         self.slider_sfx.draw(self.screen)
-        mp = pygame.mouse.get_pos()
+        mp = self._logical_mouse()
         self.btn_music_toggle.label = self._music_label()
-        for b in (self.btn_music_toggle, self.btn_back):
+        self.btn_display.label = self._display_label()
+        for b in (self.btn_music_toggle, self.btn_display, self.btn_back):
             b.update(mp)
             b.draw(self.screen)
 
@@ -662,7 +701,7 @@ class Game:
             if flash:
                 nr = self.font_menu.render("NEW HIGH SCORE!", True, (120, 255, 140))
                 self.screen.blit(nr, (SCREEN_WIDTH // 2 - nr.get_width() // 2, 280))
-        mp = pygame.mouse.get_pos()
+        mp = self._logical_mouse()
         for b in (self.btn_retry, self.btn_go_menu):
             b.update(mp)
             b.draw(self.screen)
@@ -672,9 +711,21 @@ class Game:
             if event.type == pygame.QUIT:
                 self._quit()
 
+            # Translate real window mouse coords into the game's logical space
+            # so buttons and sliders work regardless of the window size.
+            if event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
+                              pygame.MOUSEBUTTONUP):
+                event = pygame.event.Event(
+                    event.type, {**event.dict, "pos": self._to_logical(event.pos)}
+                )
+
             if event.type == pygame.USEREVENT + 10:
                 pygame.time.set_timer(pygame.USEREVENT + 10, 0)
                 play_coin_second_tone()
+
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
+                self._toggle_fullscreen()
+                continue
 
             if self.state == MENU:
                 self._events_menu(event)
@@ -696,6 +747,12 @@ class Game:
         if self.btn_play.is_clicked(event):
             sfx_menu_select()
             self.start_new_game()
+        elif self.btn_menu_settings.is_clicked(event):
+            sfx_menu_select()
+            self.settings_return = MENU
+            self.slider_music.value = settings.music_volume
+            self.slider_sfx.value   = settings.sfx_volume
+            self.state = SETTINGS
         elif self.btn_exit.is_clicked(event):
             self._quit()
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
@@ -720,6 +777,7 @@ class Game:
             self.state = PLAYING
         elif self.btn_settings.is_clicked(event):
             sfx_menu_select()
+            self.settings_return = PAUSED
             self.slider_music.value = settings.music_volume
             self.slider_sfx.value   = settings.sfx_volume
             self.state = SETTINGS
@@ -730,7 +788,7 @@ class Game:
 
     def _events_settings(self, event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.state = PAUSED
+            self.state = self.settings_return
             return
         if self.slider_music.handle_event(event):
             settings.music_volume = self.slider_music.value
@@ -746,9 +804,12 @@ class Game:
                 start_music(self.theme_index())
             else:
                 stop_music()
+        elif self.btn_display.is_clicked(event):
+            sfx_menu_select()
+            self._cycle_display_mode()
         elif self.btn_back.is_clicked(event):
             sfx_menu_select()
-            self.state = PAUSED
+            self.state = self.settings_return
 
     def _events_clear(self, event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
@@ -764,6 +825,71 @@ class Game:
             sfx_menu_select()
             self.state = MENU
             start_music(0)
+
+    def _build_display_modes(self):
+        """Fullscreen plus windowed sizes that keep the game's aspect ratio."""
+        aspect = SCREEN_WIDTH / SCREEN_HEIGHT
+        modes = [("Fullscreen", "fullscreen")]
+
+        try:
+            info = pygame.display.Info()
+            desk_w, desk_h = info.current_w, info.current_h
+        except Exception:
+            desk_w, desk_h = 1920, 1080
+
+        for height in (600, 720, 864, 1080):
+            width = round(height * aspect)
+            # Only offer windowed sizes that comfortably fit on the desktop.
+            if width <= desk_w - 40 and height <= desk_h - 80:
+                modes.append((f"{width} x {height}", (width, height)))
+
+        return modes
+
+    def _apply_display_mode(self):
+        name, mode = self.display_modes[settings.display_mode]
+        if mode == "fullscreen":
+            self.window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        else:
+            self.window = pygame.display.set_mode(mode)
+        self._recompute_scale()
+
+    def _recompute_scale(self):
+        win_w, win_h = self.window.get_size()
+        self._scale = min(win_w / SCREEN_WIDTH, win_h / SCREEN_HEIGHT)
+        dst_w = int(SCREEN_WIDTH * self._scale)
+        dst_h = int(SCREEN_HEIGHT * self._scale)
+        self._dst = pygame.Rect((win_w - dst_w) // 2, (win_h - dst_h) // 2, dst_w, dst_h)
+
+    def _to_logical(self, pos):
+        """Map a real window coordinate to the game's logical coordinate space."""
+        if self._scale <= 0:
+            return pos
+        return ((pos[0] - self._dst.x) / self._scale,
+                (pos[1] - self._dst.y) / self._scale)
+
+    def _logical_mouse(self):
+        return self._to_logical(pygame.mouse.get_pos())
+
+    def _present(self):
+        """Scale the offscreen render surface onto the actual window."""
+        self.window.fill((0, 0, 0))
+        scaled = pygame.transform.scale(self.render, self._dst.size)
+        self.window.blit(scaled, self._dst.topleft)
+
+    def _cycle_display_mode(self):
+        settings.display_mode = (settings.display_mode + 1) % len(self.display_modes)
+        self._apply_display_mode()
+
+    def _toggle_fullscreen(self):
+        if self.display_modes[settings.display_mode][1] == "fullscreen":
+            # Switch to the first available windowed mode (if any).
+            for i, (_, mode) in enumerate(self.display_modes):
+                if mode != "fullscreen":
+                    settings.display_mode = i
+                    break
+        else:
+            settings.display_mode = 0
+        self._apply_display_mode()
 
     def _quit(self):
         try:
@@ -803,5 +929,6 @@ class Game:
             elif self.state == GAMEOVER:
                 self.draw_gameover()
 
+            self._present()
             pygame.display.flip()
             self.clock.tick(FPS)

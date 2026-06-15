@@ -3,6 +3,8 @@ class Settings:
         self.music_volume = 0.5
         self.sfx_volume   = 0.7
         self.music_enabled = True
+        # Index into Game.display_modes (0 = Fullscreen by default).
+        self.display_mode = 0
 
     def clamp(self):
         self.music_volume = max(0.0, min(1.0, self.music_volume))

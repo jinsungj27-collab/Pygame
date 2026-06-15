@@ -20,6 +20,7 @@ class Enemy(pygame.sprite.Sprite):
         self.dead_timer = 0
         self.in_shell  = False
         self.shell_speed = 8.0
+        self.on_ground = False
 
         self.anim_frame = 0.0
         self.anim_speed = 0.1
@@ -70,7 +71,13 @@ class Enemy(pygame.sprite.Sprite):
 
         self.y      += self.vy
         self.rect.y  = self.y
+        self.on_ground = False
         self._collide_tiles(tiles, horizontal=False)
+
+        # Walking enemies turn around at the edge of a platform instead of
+        # walking off into a gap. Shell-sliding koopas are allowed to slide off.
+        if self.on_ground and not self.in_shell and not self._ground_ahead(tiles):
+            self.vx = -self.vx
 
         self.anim_frame += self.anim_speed
         self.update_image()
@@ -116,10 +123,22 @@ class Enemy(pygame.sprite.Sprite):
                     self.rect.bottom = tile.rect.top
                     self.vy = 0
                     self.y  = self.rect.y
+                    self.on_ground = True
                 elif self.vy < 0:
                     self.rect.top = tile.rect.bottom
                     self.vy = 0
                     self.y  = self.rect.y
+
+    def _ground_ahead(self, tiles):
+        """True if there is a tile just below the leading edge (so the enemy is
+        about to stay on a platform rather than step off into a gap)."""
+        foot_y = self.rect.bottom + 2
+        probe_x = self.rect.right + 1 if self.vx >= 0 else self.rect.left - 1
+        probe = pygame.Rect(int(probe_x), int(foot_y), 1, 2)
+        for tile in tiles:
+            if tile.rect.colliderect(probe):
+                return True
+        return False
 
     def update_image(self):
         frame = int(self.anim_frame) % 2

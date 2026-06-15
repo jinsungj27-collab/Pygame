@@ -1,4 +1,5 @@
 import pygame
+import math
 from constants import GRAVITY, TERMINAL_VELOCITY, SCREEN_HEIGHT
 from sounds import sfx_jump, sfx_shrink, sfx_die
 
@@ -35,12 +36,22 @@ class Player(pygame.sprite.Sprite):
 
         self.anim_frame = 0.0
         self.anim_speed = 0.15
+        self.walk_bob   = 0
+
+        # Run cycle: contact -> passing -> contact(opposite) -> passing.
+        self._walk_cycle = ['walk1', 'walk2', 'walk3', 'walk2']
 
         self.fast_fall = False
 
         self.update_image()
 
     def update_image(self):
+        self._select_image()
+        self._resize_rect()
+
+    def _select_image(self):
+        """Pick the current sprite frame. Safe to call every frame; does not
+        touch the collision rect (that is handled by _resize_rect)."""
         if self.is_big:
             sprite_set = self.sprites.player_big if self.facing_right else self.sprites.player_big_left
         else:
@@ -55,11 +66,15 @@ class Player(pygame.sprite.Sprite):
         elif self.is_ducking:
             self.image = sprite_set['duck']
         elif abs(self.vx) > 0.2:
-            frame_idx  = int(self.anim_frame) % 2
-            self.image = sprite_set['walk1'] if frame_idx == 0 else sprite_set['walk2']
+            frame_name = self._walk_cycle[int(self.anim_frame) % len(self._walk_cycle)]
+            self.image = sprite_set[frame_name]
+            # Bob the body up slightly on the "passing" frames of the stride.
+            self.walk_bob = -2 if frame_name == 'walk2' else 0
         else:
             self.image = sprite_set['idle']
+            self.walk_bob = 0
 
+    def _resize_rect(self):
         old_bottom = self.y + (80 if self.is_big else 40)
         self.rect  = self.image.get_rect()
         self.rect.width  = 30
@@ -184,7 +199,14 @@ class Player(pygame.sprite.Sprite):
         self.rect.centerx = self.x
 
         if abs(self.vx) > 0.1:
-            self.anim_frame += self.anim_speed
+            # Faster movement cycles the legs faster for a convincing run.
+            self.anim_frame += 0.12 + abs(self.vx) * 0.055
+        else:
+            self.anim_frame = 0.0
+
+        # Refresh only the sprite frame for animation. The collision rect is
+        # left untouched here so movement/ducking physics stay correct.
+        self._select_image()
 
     def draw(self, surface, camera_x):
         if self.invincible_timer > 0 and (self.invincible_timer // 4) % 2 == 0:
@@ -192,4 +214,5 @@ class Player(pygame.sprite.Sprite):
 
         draw_x = self.rect.x - camera_x
         draw_y = self.rect.bottom - (80 if self.is_big else 40)
-        surface.blit(self.image, (draw_x - 5, draw_y))
+        bob = self.walk_bob if self.on_ground else 0
+        surface.blit(self.image, (draw_x - 5, draw_y + bob))

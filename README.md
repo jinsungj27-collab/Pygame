@@ -1,4 +1,4 @@
-# Super Jin - Enhanced Edition v2.1.0
+# Super Jin - Enhanced Edition v2.2.0
 
 A fully-featured 2D platformer built from scratch in Python with pygame. Features endless procedurally-generated levels with parkour, boss battles, flying enemies, collectible coins, themed parallax backgrounds, a complete menu/settings system, and persistent high scores — all with zero external assets (graphics and music are synthesized at runtime).
 
@@ -161,7 +161,22 @@ Planned features: checkpoints, more power-ups, additional enemy types, fire-flow
 
 ## 📜 Version History
 
-### v2.1.0 (Current)
+### v2.2.0 (Current)
+- **Fullscreen by default** — the game now fills the whole screen, adapting the
+  logical resolution to your monitor's aspect ratio (no black bars)
+- **Screen size options in Settings** — cycle between Fullscreen and several
+  windowed sizes; press **F11** to toggle fullscreen any time
+- **Improved Mario run animation** — a proper 3-frame walk cycle with arm swing,
+  a slight body bob, and animation speed that scales with how fast he's moving
+- **Settings button on the main menu** — open Settings straight from the lobby
+- **Controls guide moved into Settings** — cleaner main menu, help is now under
+  a "CONTROLS" section in the Settings screen
+- Fixed: the player no longer spawns falling from the sky — Mario starts standing
+  on the ground
+- Fixed: walking enemies (Goombas/Koopas) no longer stroll off ledges into gaps;
+  they turn around at platform edges (kicked shells still slide off)
+
+### v2.1.0
 - Renamed to **Super Jin**
 - Runways roughly doubled in length with procedural **parkour** (floating platforms)
 - **Collectible coins** along the path, many in hard-to-reach spots, worth score
