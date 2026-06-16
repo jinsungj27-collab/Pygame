@@ -1,4 +1,4 @@
-# Super Jin - Enhanced Edition v2.3.7
+# Super Jin - Enhanced Edition v2.4.0
 
 A fully-featured 2D platformer built from scratch in Python with pygame. Features endless procedurally-generated levels with parkour, boss battles, flying enemies, collectible coins, themed parallax backgrounds, a complete menu/settings system, and persistent high scores — all with zero external assets (graphics and music are synthesized at runtime).
 
@@ -161,7 +161,18 @@ Planned features: checkpoints, more power-ups, additional enemy types, fire-flow
 
 ## 📜 Version History
 
-### v2.3.7 (Current)
+### v2.4.0 (Current)
+- **New PvP / Boss-Rush mode** — a mode-select screen lets you choose Endless or
+  a 10-boss gauntlet, each boss with its own name, attack style, AI level, color
+  tint, and tense per-fight music
+- First boss is now named **GORTHRAX** (shared by Endless and PvP)
+- Coin feedback: collecting a coin shows a white "+200" score popup and a gold
+  "+50" coin popup; coins no longer respawn after a death (only on a new game),
+  which also closes the coin-farming exploit
+- **God Mode** toggle in Settings for testing (invincible, pit-safe)
+- Score popups now float straight up from the pickup instead of drifting to the HUD
+
+### v2.3.7
 - **City phase** after the first boss: the world switches to a parallax city
   skyline with randomized building heights, lit windows, and a grassy street
 - **New enemy — Robot**: patrols city streets, turns at ledges, stompable

@@ -392,7 +392,7 @@ def build_boss_level(level_num, sprites, seed=0):
 #   coins      [(col, row), ...] pickups
 PVP_LEVELS = [
     {   # 1 - mirrors Endless boss #1
-        'name': 'THE BEAST', 'kind': 'classic', 'theme': 0, 'tint': None,
+        'name': 'GORTHRAX', 'kind': 'classic', 'theme': 0, 'tint': None,
         'hp': 4, 'speed': 1.4, 'ai': 1, 'style': 'fire',
         'cols': 20, 'platforms': {9: [(4, 5), (14, 15)]},
         'spikes': [], 'enemies': [], 'coins': [(4, 8), (15, 8)],

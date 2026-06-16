@@ -164,7 +164,7 @@ class Boss(pygame.sprite.Sprite):
         # the player's movement, dashes and fires faster.
         self.ai = max(1, int(ai))
         self.style = style or ('laser' if kind == 'city' else 'fire')
-        self.name = name or ('MEGA MECH' if kind == 'city' else 'THE BEAST')
+        self.name = name or ('MEGA MECH' if kind == 'city' else 'GORTHRAX')
 
         self.hp = hp
         self.max_hp = hp

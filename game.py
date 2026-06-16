@@ -69,7 +69,7 @@ class Game:
         self._dst = pygame.Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
         self._scale = 1.0
         self._apply_display_mode()
-        pygame.display.set_caption("Super Jin  v2.3.7")
+        pygame.display.set_caption("Super Jin  v2.4.0")
         self.clock = pygame.time.Clock()
 
         self.font_hud   = pygame.font.Font(None, 24); self.font_hud.set_bold(True)
@@ -973,7 +973,7 @@ class Game:
             b.update(mp)
             b.draw(self.screen)
 
-        tip = self.font_small.render("v2.3.7  -  Enhanced Edition", True, (220, 220, 230))
+        tip = self.font_small.render("v2.4.0  -  Enhanced Edition", True, (220, 220, 230))
         self.screen.blit(tip, (SCREEN_WIDTH // 2 - tip.get_width() // 2, 560))
 
     def draw_modeselect(self):
