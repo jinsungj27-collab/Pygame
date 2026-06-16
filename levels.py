@@ -405,82 +405,80 @@ PVP_LEVELS = [
         'spikes': [], 'enemies': [],
         'coins': [(4, 10), (14, 8), (15, 8), (9, 7), (20, 7), (25, 10)],
     },
-    {   # 3 - first "plot twist": smarter hunter + obstacles + ground enemy
-        'name': 'IRON STALKER', 'kind': 'city', 'theme': CITY_THEME_INDEX,
-        'tint': (140, 180, 255),
-        'hp': 7, 'speed': 1.7, 'ai': 3, 'style': 'laser',
+    {   # 3 - IRON STALKER: steel raptor-bot firing homing missiles
+        'name': 'IRON STALKER', 'sprite': 'stalker', 'kind': 'city', 'theme': CITY_THEME_INDEX,
+        'aura': (120, 160, 255), 'proj_color': (150, 190, 255), 'enemy_tint': (150, 180, 230),
+        'hp': 7, 'speed': 1.8, 'ai': 3, 'style': 'homing',
         'cols': 30,
-        'platforms': {10: [(6, 8), (21, 23)], 8: [(13, 16)]},
-        'spikes': [14, 15], 'enemies': [(10, 'goomba'), (20, 'robot')],
-        'coins': [(7, 9), (14, 7), (15, 7), (22, 9)],
+        'platforms': {10: [(5, 7), (22, 24)], 7: [(13, 16)]},
+        'spikes': [14, 15], 'enemies': [(9, 'robot'), (20, 'robot')],
+        'coins': [(6, 9), (14, 6), (15, 6), (23, 9)],
     },
-    {   # 4 - triple-shot pyro, more spikes and enemies
-        'name': 'BLAZE TYRANT', 'kind': 'classic', 'theme': 1,
-        'tint': (255, 120, 80),
-        'hp': 9, 'speed': 1.8, 'ai': 4, 'style': 'spread',
+    {   # 4 - BLAZE TYRANT: horned fire demon spitting fans of flame
+        'name': 'BLAZE TYRANT', 'sprite': 'blaze', 'kind': 'classic', 'theme': 1,
+        'aura': (255, 110, 60), 'proj_color': (255, 130, 40), 'enemy_tint': (255, 120, 90),
+        'hp': 9, 'speed': 1.9, 'ai': 4, 'style': 'spread',
         'cols': 30,
-        'platforms': {10: [(4, 6), (23, 25)], 8: [(11, 13), (16, 18)]},
-        'spikes': [9, 10, 19, 20], 'enemies': [(8, 'koopa'), (21, 'goomba')],
-        'coins': [(5, 9), (12, 7), (17, 7), (24, 9)],
+        'platforms': {11: [(4, 5), (25, 26)], 9: [(10, 11), (19, 20)], 7: [(14, 16)]},
+        'spikes': [8, 9, 21, 22], 'enemies': [(8, 'goomba'), (16, 'koopa'), (23, 'goomba')],
+        'coins': [(5, 8), (15, 6), (24, 8)],
     },
-    {   # 5 - dashing storm sentinel that rains rapid laser volleys
-        'name': 'STORM SENTINEL', 'kind': 'city', 'theme': 2,
-        'tint': (110, 235, 255),
-        'hp': 11, 'speed': 2.0, 'ai': 5, 'style': 'volley',
+    {   # 5 - STORM SENTINEL: hovering eye that calls down lightning
+        'name': 'STORM SENTINEL', 'sprite': 'storm', 'kind': 'city', 'theme': 2,
+        'aura': (110, 235, 255), 'proj_color': (180, 245, 255), 'enemy_tint': (140, 220, 255),
+        'hp': 11, 'speed': 2.1, 'ai': 5, 'style': 'storm',
         'cols': 32,
-        'platforms': {11: [(5, 7), (25, 27)], 9: [(10, 12), (20, 22)], 7: [(15, 17)]},
-        'spikes': [13, 14, 18, 19], 'enemies': [(9, 'robot'), (16, 'goomba'), (24, 'robot')],
-        'coins': [(6, 10), (16, 6), (26, 10)],
+        'platforms': {10: [(6, 8), (24, 26)], 8: [(13, 14), (18, 19)]},
+        'spikes': [15, 16], 'enemies': [(9, 'bird'), (16, 'bird'), (24, 'bird')],
+        'coins': [(7, 9), (16, 7), (25, 9)],
     },
-    {   # 6 - meteor king lobbing arcing fireballs, leaps high
-        'name': 'METEOR KING', 'kind': 'classic', 'theme': 3,
-        'tint': (200, 130, 255),
-        'hp': 12, 'speed': 2.0, 'ai': 6, 'style': 'rain',
+    {   # 6 - METEOR KING: crowned rock golem raining meteors
+        'name': 'METEOR KING', 'sprite': 'meteor', 'kind': 'classic', 'theme': 3,
+        'aura': (200, 130, 255), 'proj_color': (200, 120, 255), 'enemy_tint': (180, 140, 210),
+        'hp': 13, 'speed': 2.0, 'ai': 6, 'style': 'rain',
         'cols': 32,
         'platforms': {10: [(7, 9), (23, 25)], 8: [(13, 14), (18, 19)], 6: [(15, 17)]},
-        'spikes': [11, 12, 13, 20, 21, 22],
-        'enemies': [(8, 'koopa'), (16, 'robot'), (24, 'koopa')],
+        'spikes': [11, 12, 20, 21], 'enemies': [(8, 'koopa'), (16, 'goomba'), (24, 'koopa')],
         'coins': [(8, 9), (16, 5), (24, 9)],
     },
-    {   # 7 - phantom railgun: predicts your movement and snipes you
-        'name': 'PHANTOM RAILGUN', 'kind': 'city', 'theme': CITY_THEME_INDEX,
-        'tint': (130, 255, 170),
-        'hp': 14, 'speed': 2.2, 'ai': 7, 'style': 'aimed',
+    {   # 7 - PHANTOM RAILGUN: spectral sniper with predicted shots
+        'name': 'PHANTOM RAILGUN', 'sprite': 'phantom', 'kind': 'city', 'theme': CITY_THEME_INDEX,
+        'aura': (130, 255, 170), 'proj_color': (150, 255, 210), 'enemy_tint': (130, 240, 180),
+        'hp': 15, 'speed': 2.2, 'ai': 7, 'style': 'aimed',
         'cols': 34,
-        'platforms': {11: [(4, 6), (28, 30)], 9: [(10, 12), (22, 24)], 7: [(16, 18)]},
-        'spikes': [8, 9, 14, 15, 19, 20, 25, 26],
-        'enemies': [(10, 'robot'), (17, 'robot'), (26, 'goomba')],
+        'platforms': {11: [(4, 6), (28, 30)], 9: [(11, 13), (21, 23)], 7: [(16, 18)]},
+        'spikes': [8, 9, 25, 26], 'enemies': [(10, 'bird'), (17, 'robot'), (26, 'bird')],
         'coins': [(5, 10), (17, 6), (29, 10)],
     },
-    {   # 8 - titan crusher: ground-pound shockwaves on landing
-        'name': 'TITAN CRUSHER', 'kind': 'classic', 'theme': 3,
-        'tint': (225, 180, 90),
-        'hp': 16, 'speed': 2.2, 'ai': 8, 'style': 'slam',
+    {   # 8 - TITAN CRUSHER: stone titan with ground-pound shockwaves
+        'name': 'TITAN CRUSHER', 'sprite': 'titan', 'kind': 'classic', 'theme': 3,
+        'aura': (255, 200, 90), 'proj_color': (255, 200, 90), 'enemy_tint': (220, 180, 100),
+        'hp': 17, 'speed': 2.2, 'ai': 8, 'style': 'slam',
         'cols': 34,
-        'platforms': {10: [(6, 8), (26, 28)], 8: [(12, 14), (20, 22)], 6: [(16, 18)]},
-        'spikes': [10, 11, 16, 17, 18, 23, 24],
+        'platforms': {10: [(6, 8), (26, 28)], 7: [(15, 19)]},
+        'spikes': [11, 12, 22, 23],
         'enemies': [(9, 'koopa'), (15, 'goomba'), (19, 'goomba'), (27, 'koopa')],
-        'coins': [(7, 9), (17, 5), (27, 9)],
+        'coins': [(7, 9), (17, 6), (27, 9)],
     },
-    {   # 9 - omega warden: cycles fire / laser / spread relentlessly
-        'name': 'OMEGA WARDEN', 'kind': 'city', 'theme': 2,
-        'tint': (255, 120, 220),
-        'hp': 18, 'speed': 2.4, 'ai': 9, 'style': 'cross',
+    {   # 9 - OMEGA WARDEN: armored knight cycling fire / laser / spread
+        'name': 'OMEGA WARDEN', 'sprite': 'warden', 'kind': 'city', 'theme': 2,
+        'aura': (255, 120, 230), 'proj_color': (255, 130, 235), 'enemy_tint': (230, 120, 210),
+        'hp': 19, 'speed': 2.4, 'ai': 9, 'style': 'cross',
         'cols': 36,
-        'platforms': {11: [(4, 6), (30, 32)], 9: [(10, 13), (24, 27)], 7: [(17, 19)]},
-        'spikes': [8, 9, 14, 15, 16, 21, 22, 28, 29],
-        'enemies': [(10, 'robot'), (18, 'robot'), (26, 'robot'), (33, 'goomba')],
+        'platforms': {11: [(4, 6), (30, 32)], 9: [(11, 14), (23, 26)], 7: [(17, 19)]},
+        'spikes': [9, 10, 26, 27],
+        'enemies': [(10, 'robot'), (18, 'bird'), (27, 'robot'), (33, 'goomba')],
         'coins': [(5, 10), (18, 6), (31, 10)],
     },
-    {   # 10 - final boss: every attack, maximum intelligence
-        'name': 'JIN OVERLORD', 'kind': 'city', 'theme': CITY_THEME_INDEX,
-        'tint': (255, 80, 80),
+    {   # 10 - JIN OVERLORD: the final caped demon-king, every attack
+        'name': 'JIN OVERLORD', 'sprite': 'overlord', 'kind': 'city', 'theme': CITY_THEME_INDEX,
+        'aura': (255, 80, 80), 'proj_color': (255, 90, 90), 'enemy_tint': (200, 70, 80),
         'hp': 22, 'speed': 2.6, 'ai': 10, 'style': 'chaos',
         'cols': 38,
         'platforms': {12: [(5, 7), (31, 33)], 10: [(11, 14), (24, 27)],
                       8: [(17, 21)], 6: [(13, 15), (23, 25)]},
-        'spikes': [9, 10, 15, 16, 22, 23, 28, 29, 30],
-        'enemies': [(11, 'robot'), (18, 'goomba'), (20, 'robot'),
+        'spikes': [9, 10, 15, 16, 22, 23, 28, 29],
+        'enemies': [(11, 'robot'), (18, 'koopa'), (20, 'bird'),
                     (27, 'robot'), (34, 'koopa')],
         'coins': [(6, 11), (19, 7), (32, 11), (13, 5), (24, 5)],
     },
@@ -540,19 +538,35 @@ def build_pvp_level(level_num, sprites, seed=0):
         coin_group.add(Coin(c * TILE_SIZE + TILE_SIZE // 2,
                             r * TILE_SIZE + TILE_SIZE // 2, sprites))
 
-    # Patrolling ground enemies (the "moving enemy on the ground").
+    # Patrolling small enemies - the "different moving small enemies" per boss.
+    # Each boss themes its minions with enemy_tint, and arenas mix ground
+    # walkers (goomba/koopa/robot) with flyers (bird).
     speed_mult = 1.0 + 0.08 * level_num
+    etint = cfg.get('enemy_tint')
     for (c, etype) in cfg.get('enemies', []):
-        e = Enemy(c * TILE_SIZE, 11 * TILE_SIZE, etype, sprites)
-        base_speed = 1.8 if etype == 'robot' else 1.2
-        e.vx = -base_speed * speed_mult
-        e.shell_speed = 8.0 * speed_mult
+        if etype == 'bird':
+            fly_row = 8
+            e = Enemy(c * TILE_SIZE, fly_row * TILE_SIZE, 'bird', sprites)
+            e.vx = -2.2 * speed_mult
+            e.fly_y = float(fly_row * TILE_SIZE)
+            lo = max(2, c - 6)
+            hi = min(COLS - 3, c + 6)
+            e.patrol_min = lo * TILE_SIZE
+            e.patrol_max = hi * TILE_SIZE
+        else:
+            e = Enemy(c * TILE_SIZE, 11 * TILE_SIZE, etype, sprites)
+            base_speed = 1.8 if etype == 'robot' else 1.2
+            e.vx = -base_speed * speed_mult
+            e.shell_speed = 8.0 * speed_mult
+        if etint is not None:
+            e.tint = etint
         enemy_group.add(e)
 
     boss = Boss((COLS // 2) * TILE_SIZE, 13 * TILE_SIZE, sprites,
                 hp=cfg['hp'], speed=cfg['speed'], kind=cfg['kind'],
                 ai=cfg['ai'], style=cfg['style'], name=cfg['name'],
-                tint=cfg.get('tint'))
+                tint=cfg.get('tint'), sprite=cfg.get('sprite'),
+                aura=cfg.get('aura'), proj_color=cfg.get('proj_color'))
     boss.set_bounds(TILE_SIZE + 20, (COLS - 1) * TILE_SIZE - 20)
     data.boss = boss
 

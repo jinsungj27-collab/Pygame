@@ -8,9 +8,10 @@ from sounds import sfx_stomp, sfx_die, sfx_hazard
 
 
 class Fireball(pygame.sprite.Sprite):
-    def __init__(self, x, y, vx, vy, kind='classic', grav=0.18):
+    def __init__(self, x, y, vx, vy, kind='classic', grav=0.18, color=None):
         super().__init__()
         self.kind = kind
+        self.color = color
         self.x = float(x)
         self.y = float(y)
         self.vx = vx
@@ -44,7 +45,15 @@ class Fireball(pygame.sprite.Sprite):
         dx = int(self.x - camera_x)
         dy = int(self.y)
         flick = int(self.anim) % 2
-        if self.kind == 'city':
+        if self.color is not None:
+            c = self.color
+            dark = (max(0, c[0] // 3), max(0, c[1] // 3), max(0, c[2] // 3))
+            light = (min(255, c[0] + 60), min(255, c[1] + 60), min(255, c[2] + 60))
+            outer = c if flick == 0 else light
+            pygame.draw.circle(surface, dark,  (dx, dy), 12)
+            pygame.draw.circle(surface, outer, (dx, dy), 10)
+            pygame.draw.circle(surface, light, (dx, dy), 5)
+        elif self.kind == 'city':
             # Electric energy bolt.
             outer = (90, 200, 255) if flick == 0 else (60, 170, 255)
             pygame.draw.circle(surface, (20, 60, 130), (dx, dy), 12)
@@ -59,8 +68,9 @@ class Fireball(pygame.sprite.Sprite):
 
 class Laser(pygame.sprite.Sprite):
     """Fast straight-flying energy beam used by the city mech boss."""
-    def __init__(self, x, y, vx):
+    def __init__(self, x, y, vx, color=None):
         super().__init__()
+        self.color = color
         self.x = float(x)
         self.y = float(y)
         self.vx = vx
@@ -88,11 +98,19 @@ class Laser(pygame.sprite.Sprite):
         dx = int(self.x - camera_x)
         dy = int(self.y)
         flick = int(self.anim) % 2
-        core = (235, 250, 255) if flick == 0 else (205, 240, 255)
         beam = pygame.Rect(dx - 17, dy - 5, 34, 10)
-        pygame.draw.rect(surface, (20, 60, 130), beam.inflate(4, 4), border_radius=5)
-        pygame.draw.rect(surface, (80, 185, 255), beam, border_radius=5)
-        pygame.draw.rect(surface, core, beam.inflate(-10, -4), border_radius=4)
+        if self.color is not None:
+            c = self.color
+            dark = (max(0, c[0] // 3), max(0, c[1] // 3), max(0, c[2] // 3))
+            core = (min(255, c[0] + 70), min(255, c[1] + 70), min(255, c[2] + 70))
+            pygame.draw.rect(surface, dark, beam.inflate(4, 4), border_radius=5)
+            pygame.draw.rect(surface, c, beam, border_radius=5)
+            pygame.draw.rect(surface, core, beam.inflate(-10, -4), border_radius=4)
+        else:
+            core = (235, 250, 255) if flick == 0 else (205, 240, 255)
+            pygame.draw.rect(surface, (20, 60, 130), beam.inflate(4, 4), border_radius=5)
+            pygame.draw.rect(surface, (80, 185, 255), beam, border_radius=5)
+            pygame.draw.rect(surface, core, beam.inflate(-10, -4), border_radius=4)
 
 
 class Shockwave(pygame.sprite.Sprite):
@@ -135,19 +153,133 @@ class Shockwave(pygame.sprite.Sprite):
         pygame.draw.line(surface, (255, 235, 150), (dx, dy - h + 4), (dx, dy - 4), 3)
 
 
+class HomingMissile(pygame.sprite.Sprite):
+    """A missile that curves toward the player for a while before going
+    straight. Used by the tracking IRON STALKER."""
+    def __init__(self, x, y, vx, vy, target, color=(150, 190, 255)):
+        super().__init__()
+        self.x = float(x)
+        self.y = float(y)
+        self.vx = float(vx)
+        self.vy = float(vy)
+        self.target = target
+        self.color = color
+        self.homing = 70          # frames it actively steers
+        self.life = 200
+        self.anim = 0.0
+        self.speed = math.hypot(vx, vy) or 5.0
+        self.rect = pygame.Rect(0, 0, 18, 18)
+        self.rect.center = (int(x), int(y))
+
+    def update(self, tiles=None):
+        if self.target is not None and self.homing > 0:
+            self.homing -= 1
+            dx = self.target.rect.centerx - self.x
+            dy = self.target.rect.centery - self.y
+            dist = math.hypot(dx, dy) or 1.0
+            # Steer the velocity gently toward the target (limited turn rate).
+            self.vx += (dx / dist * self.speed - self.vx) * 0.08
+            self.vy += (dy / dist * self.speed - self.vy) * 0.08
+        self.x += self.vx
+        self.y += self.vy
+        self.rect.center = (int(self.x), int(self.y))
+        self.anim += 0.5
+        if tiles is not None:
+            for t in tiles:
+                if getattr(t, 'tile_type', None) in ('solid', 'ground') \
+                        and self.rect.colliderect(t.rect):
+                    self.kill()
+                    return
+        self.life -= 1
+        if self.life <= 0:
+            self.kill()
+
+    def draw(self, surface, camera_x):
+        dx = int(self.x - camera_x)
+        dy = int(self.y)
+        c = self.color
+        # Exhaust trail opposite the heading.
+        tl = math.hypot(self.vx, self.vy) or 1.0
+        ex = dx - int(self.vx / tl * 14)
+        ey = dy - int(self.vy / tl * 14)
+        pygame.draw.line(surface, (255, 200, 120), (dx, dy), (ex, ey), 5)
+        pygame.draw.circle(surface, (30, 30, 40), (dx, dy), 9)
+        pygame.draw.circle(surface, c, (dx, dy), 7)
+        pygame.draw.circle(surface, (255, 255, 255), (dx, dy), 3)
+
+
+class LightningStrike(pygame.sprite.Sprite):
+    """A bolt that briefly telegraphs, then crashes straight down from the top
+    of the arena onto the player's position. Used by STORM SENTINEL."""
+    def __init__(self, x, color=(180, 245, 255)):
+        super().__init__()
+        self.x = float(x)
+        self.y = 30.0
+        self.color = color
+        self.warn = 22           # telegraph frames before it falls
+        self.vy = 0.0
+        self.life = 130
+        self.anim = 0.0
+        self.rect = pygame.Rect(0, 0, 16, 40)
+        self.rect.midtop = (int(x), int(self.y))
+        self.segments = [(int(x), 0)]
+
+    def update(self, tiles=None):
+        self.anim += 0.6
+        if self.warn > 0:
+            self.warn -= 1
+            # No hitbox during the warning flash.
+            self.rect = pygame.Rect(int(self.x) - 2, 0, 4, 0)
+            self.life -= 1
+            if self.life <= 0:
+                self.kill()
+            return
+        self.vy = min(self.vy + 1.4, 18.0)
+        self.y += self.vy
+        self.rect = pygame.Rect(0, 0, 16, 44)
+        self.rect.midbottom = (int(self.x), int(self.y))
+        if tiles is not None:
+            for t in tiles:
+                if getattr(t, 'tile_type', None) in ('solid', 'ground') \
+                        and self.rect.colliderect(t.rect):
+                    self.kill()
+                    return
+        self.life -= 1
+        if self.life <= 0 or self.y > 700:
+            self.kill()
+
+    def draw(self, surface, camera_x):
+        dx = int(self.x - camera_x)
+        if self.warn > 0:
+            # Flashing warning column where the bolt will land.
+            if (int(self.anim) % 2) == 0:
+                col = pygame.Surface((10, 560), pygame.SRCALPHA)
+                col.fill((*self.color, 70))
+                surface.blit(col, (dx - 5, 30))
+            return
+        # Jagged falling bolt.
+        bottom = int(self.y)
+        pts = [(dx, bottom - 44), (dx - 6, bottom - 30), (dx + 5, bottom - 18),
+               (dx - 4, bottom - 6), (dx, bottom)]
+        pygame.draw.lines(surface, (255, 255, 255), False, pts, 5)
+        pygame.draw.lines(surface, self.color, False, pts, 2)
+
+
 class Boss(pygame.sprite.Sprite):
     WIDTH, HEIGHT = 92, 96
 
     def __init__(self, x, y, sprites, hp=4, speed=1.6, kind='classic',
-                 ai=1, style=None, name=None, tint=None):
+                 ai=1, style=None, name=None, tint=None, sprite=None, aura=None,
+                 proj_color=None):
         super().__init__()
         self.sprites = sprites
         self.kind = kind
-        self.sprite_set = sprites.boss_city if kind == 'city' else sprites.boss
-        # Per-boss color identity. tint=None keeps the original sprite look
-        # (used by Endless mode and the first two PvP bosses); a tint recolors
-        # the boss and gives it a matching glowing aura.
+        self.sprite_set = sprites.boss_set(sprite or kind)
+        # Per-boss color identity. tint recolors the base sprite (used by the
+        # first PvP bosses that reuse the original art); the newer bosses have
+        # their own colored art so they pass tint=None and only an aura color.
         self.tint = tint
+        self.aura = aura or tint
         if tint:
             self.frames = {k: self._mul_tint(v, tint)
                            for k, v in self.sprite_set.items()}
@@ -165,6 +297,7 @@ class Boss(pygame.sprite.Sprite):
         self.ai = max(1, int(ai))
         self.style = style or ('laser' if kind == 'city' else 'fire')
         self.name = name or ('MEGA MECH' if kind == 'city' else 'GORTHRAX')
+        self.proj_color = proj_color
 
         self.hp = hp
         self.max_hp = hp
@@ -328,13 +461,14 @@ class Boss(pygame.sprite.Sprite):
             style = ['fire', 'laser', 'spread'][self.combo % 3]
             self.combo += 1
         elif style == 'chaos':
-            style = ['spread', 'volley', 'aimed', 'rain'][self.combo % 4]
+            style = ['spread', 'volley', 'aimed', 'rain', 'homing', 'storm'][self.combo % 6]
             self.combo += 1
 
         self._do_attack(style, projectiles, player, direction)
         sfx_hazard()
 
     def _do_attack(self, style, projectiles, player, direction):
+        pc = self.proj_color
         if style == 'laser':
             self._fire_laser(projectiles, direction)
         elif style == 'volley':
@@ -345,23 +479,42 @@ class Boss(pygame.sprite.Sprite):
             cx = self.rect.centerx + direction * 30
             cy = self.rect.top + 30
             for vy in (-4.5, -2.5, -0.5):
-                projectiles.add(Fireball(cx, cy, direction * 3.4, vy, kind=self.kind))
+                projectiles.add(Fireball(cx, cy, direction * 3.4, vy,
+                                         kind=self.kind, color=pc))
         elif style == 'rain':
             cx = self.rect.centerx + direction * 20
             cy = self.rect.top + 10
             for vx in (direction * 1.6, direction * 3.2):
-                projectiles.add(Fireball(cx, cy, vx, -8.5, kind=self.kind, grav=0.32))
+                projectiles.add(Fireball(cx, cy, vx, -8.5, kind=self.kind,
+                                         grav=0.32, color=pc))
         elif style == 'aimed':
             self._fire_aimed(projectiles, player)
+        elif style == 'homing':
+            cx = self.rect.centerx + direction * 30
+            cy = self.rect.centery
+            n = 2 if self.ai >= 6 else 1
+            for k in range(n):
+                projectiles.add(HomingMissile(
+                    cx, cy - k * 16, direction * 4.0, -1.5 + k * 1.0, player,
+                    color=pc or (150, 190, 255)))
+        elif style == 'storm':
+            # Call lightning down onto and around the player's position.
+            base = player.rect.centerx
+            offs = [0] if self.ai < 6 else [-70, 0, 70]
+            for o in offs:
+                projectiles.add(LightningStrike(base + o,
+                                                color=pc or (180, 245, 255)))
         else:  # 'fire'
             projectiles.add(Fireball(self.rect.centerx + direction * 30,
                                      self.rect.top + 30,
-                                     direction * 3.6, -3.0, kind=self.kind))
+                                     direction * 3.6, -3.0, kind=self.kind,
+                                     color=pc))
 
     def _fire_laser(self, projectiles, direction):
         projectiles.add(Laser(self.rect.centerx + direction * 44,
                               self.rect.bottom - 30,
-                              direction * (8.0 + 0.2 * self.ai)))
+                              direction * (8.0 + 0.2 * self.ai),
+                              color=self.proj_color))
 
     def _fire_aimed(self, projectiles, player):
         """A predicted shot: aims where the player is heading, not just where
@@ -376,7 +529,7 @@ class Boss(pygame.sprite.Sprite):
         dist = max(1.0, math.hypot(dx, dy))
         speed = 6.0 + 0.2 * self.ai
         projectiles.add(Fireball(sx, sy, dx / dist * speed, dy / dist * speed,
-                                 kind=self.kind, grav=0.04))
+                                 kind=self.kind, grav=0.04, color=self.proj_color))
 
     def stomp(self):
         if self.invincible > 0 or self.is_dead:
@@ -405,7 +558,7 @@ class Boss(pygame.sprite.Sprite):
     def _draw_aura(self, surface, camera_x):
         """A soft pulsing colored glow behind the boss so each one reads as a
         distinct threat at a glance."""
-        if not self.tint or self.is_dead:
+        if not self.aura or self.is_dead:
             return
         pulse = 0.5 + 0.5 * math.sin(self.anim_frame * 1.4)
         rw = int(self.WIDTH * 1.25)
@@ -415,7 +568,7 @@ class Boss(pygame.sprite.Sprite):
             alpha = int((40 + 50 * pulse) * (1.0 - i * 0.25))
             rect = pygame.Rect(0, 0, int(rw * scale), int(rh * scale))
             rect.center = (rw // 2, rh // 2)
-            pygame.draw.ellipse(aura, (*self.tint, alpha), rect)
+            pygame.draw.ellipse(aura, (*self.aura, alpha), rect)
         cx = self.rect.centerx - camera_x
         cy = self.rect.centery
         surface.blit(aura, (cx - rw // 2, cy - rh // 2))

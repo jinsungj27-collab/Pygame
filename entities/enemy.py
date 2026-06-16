@@ -25,6 +25,10 @@ class Enemy(pygame.sprite.Sprite):
         self.anim_frame = 0.0
         self.anim_speed = 0.1
 
+        # Optional color theming so a boss's minions match its palette.
+        self.tint = None
+        self._tint_cache = {}
+
         self.is_bird = (enemy_type == 'bird')
         if self.is_bird:
             self.vx = -2.0
@@ -216,4 +220,13 @@ class Enemy(pygame.sprite.Sprite):
         self.vx       = direction * self.shell_speed
 
     def draw(self, surface, camera_x):
-        surface.blit(self.image, (self.rect.x - camera_x, self.rect.y))
+        img = self.image
+        if self.tint is not None:
+            key = id(img)
+            timg = self._tint_cache.get(key)
+            if timg is None:
+                timg = img.copy()
+                timg.fill((*self.tint, 255), special_flags=pygame.BLEND_RGBA_MULT)
+                self._tint_cache[key] = timg
+            img = timg
+        surface.blit(img, (self.rect.x - camera_x, self.rect.y))
