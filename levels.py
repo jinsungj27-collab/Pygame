@@ -61,6 +61,7 @@ class LevelData:
         self.start_timer  = 400
         self.is_boss      = False
         self.boss         = None
+        self.boss_name    = None
 
 
 def _create_pipe(col, row, layout):
@@ -364,6 +365,194 @@ def build_boss_level(level_num, sprites, seed=0):
                             r * TILE_SIZE + TILE_SIZE // 2, sprites))
 
     boss = Boss(boss_x, 13 * TILE_SIZE, sprites, hp=hp, speed=speed, kind=kind)
+    boss.set_bounds(TILE_SIZE + 20, (COLS - 1) * TILE_SIZE - 20)
+    data.boss = boss
+
+    data.tile_group   = tile_group
+    data.hazard_group = hazard_group
+    data.enemy_group  = enemy_group
+    data.coin_group   = coin_group
+    return data
+
+
+# ---------------------------------------------------------------------------
+# PvP / Boss-Rush mode
+# ---------------------------------------------------------------------------
+# Ten hand-tuned boss encounters. Each level introduces a different boss with
+# its own attack style, movement intelligence (ai 1-10) and arena. Levels 1
+# and 2 deliberately mirror the first two bosses of Endless mode; from level 3
+# on the bosses get smarter and the arenas add obstacles (spikes / platforms)
+# and patrolling ground enemies. Difficulty climbs every single level.
+#
+# Arena fields:
+#   cols       width of the arena in tiles
+#   platforms  {row: [(col_start, col_end), ...]} floating ledges to dodge on
+#   spikes     [col, ...] floor hazards on row 12 the player must avoid
+#   enemies    [(col, type), ...] patrolling ground enemies (goomba/koopa/robot)
+#   coins      [(col, row), ...] pickups
+PVP_LEVELS = [
+    {   # 1 - mirrors Endless boss #1
+        'name': 'THE BEAST', 'kind': 'classic', 'theme': 0, 'tint': None,
+        'hp': 4, 'speed': 1.4, 'ai': 1, 'style': 'fire',
+        'cols': 20, 'platforms': {9: [(4, 5), (14, 15)]},
+        'spikes': [], 'enemies': [], 'coins': [(4, 8), (15, 8)],
+    },
+    {   # 2 - mirrors Endless boss #2
+        'name': 'MEGA MECH', 'kind': 'city', 'theme': CITY_THEME_INDEX, 'tint': None,
+        'hp': 6, 'speed': 1.5, 'ai': 1, 'style': 'laser',
+        'cols': 30,
+        'platforms': {11: [(3, 5), (24, 26)], 9: [(13, 16)], 8: [(8, 10), (19, 21)]},
+        'spikes': [], 'enemies': [],
+        'coins': [(4, 10), (14, 8), (15, 8), (9, 7), (20, 7), (25, 10)],
+    },
+    {   # 3 - first "plot twist": smarter hunter + obstacles + ground enemy
+        'name': 'IRON STALKER', 'kind': 'city', 'theme': CITY_THEME_INDEX,
+        'tint': (140, 180, 255),
+        'hp': 7, 'speed': 1.7, 'ai': 3, 'style': 'laser',
+        'cols': 30,
+        'platforms': {10: [(6, 8), (21, 23)], 8: [(13, 16)]},
+        'spikes': [14, 15], 'enemies': [(10, 'goomba'), (20, 'robot')],
+        'coins': [(7, 9), (14, 7), (15, 7), (22, 9)],
+    },
+    {   # 4 - triple-shot pyro, more spikes and enemies
+        'name': 'BLAZE TYRANT', 'kind': 'classic', 'theme': 1,
+        'tint': (255, 120, 80),
+        'hp': 9, 'speed': 1.8, 'ai': 4, 'style': 'spread',
+        'cols': 30,
+        'platforms': {10: [(4, 6), (23, 25)], 8: [(11, 13), (16, 18)]},
+        'spikes': [9, 10, 19, 20], 'enemies': [(8, 'koopa'), (21, 'goomba')],
+        'coins': [(5, 9), (12, 7), (17, 7), (24, 9)],
+    },
+    {   # 5 - dashing storm sentinel that rains rapid laser volleys
+        'name': 'STORM SENTINEL', 'kind': 'city', 'theme': 2,
+        'tint': (110, 235, 255),
+        'hp': 11, 'speed': 2.0, 'ai': 5, 'style': 'volley',
+        'cols': 32,
+        'platforms': {11: [(5, 7), (25, 27)], 9: [(10, 12), (20, 22)], 7: [(15, 17)]},
+        'spikes': [13, 14, 18, 19], 'enemies': [(9, 'robot'), (16, 'goomba'), (24, 'robot')],
+        'coins': [(6, 10), (16, 6), (26, 10)],
+    },
+    {   # 6 - meteor king lobbing arcing fireballs, leaps high
+        'name': 'METEOR KING', 'kind': 'classic', 'theme': 3,
+        'tint': (200, 130, 255),
+        'hp': 12, 'speed': 2.0, 'ai': 6, 'style': 'rain',
+        'cols': 32,
+        'platforms': {10: [(7, 9), (23, 25)], 8: [(13, 14), (18, 19)], 6: [(15, 17)]},
+        'spikes': [11, 12, 13, 20, 21, 22],
+        'enemies': [(8, 'koopa'), (16, 'robot'), (24, 'koopa')],
+        'coins': [(8, 9), (16, 5), (24, 9)],
+    },
+    {   # 7 - phantom railgun: predicts your movement and snipes you
+        'name': 'PHANTOM RAILGUN', 'kind': 'city', 'theme': CITY_THEME_INDEX,
+        'tint': (130, 255, 170),
+        'hp': 14, 'speed': 2.2, 'ai': 7, 'style': 'aimed',
+        'cols': 34,
+        'platforms': {11: [(4, 6), (28, 30)], 9: [(10, 12), (22, 24)], 7: [(16, 18)]},
+        'spikes': [8, 9, 14, 15, 19, 20, 25, 26],
+        'enemies': [(10, 'robot'), (17, 'robot'), (26, 'goomba')],
+        'coins': [(5, 10), (17, 6), (29, 10)],
+    },
+    {   # 8 - titan crusher: ground-pound shockwaves on landing
+        'name': 'TITAN CRUSHER', 'kind': 'classic', 'theme': 3,
+        'tint': (225, 180, 90),
+        'hp': 16, 'speed': 2.2, 'ai': 8, 'style': 'slam',
+        'cols': 34,
+        'platforms': {10: [(6, 8), (26, 28)], 8: [(12, 14), (20, 22)], 6: [(16, 18)]},
+        'spikes': [10, 11, 16, 17, 18, 23, 24],
+        'enemies': [(9, 'koopa'), (15, 'goomba'), (19, 'goomba'), (27, 'koopa')],
+        'coins': [(7, 9), (17, 5), (27, 9)],
+    },
+    {   # 9 - omega warden: cycles fire / laser / spread relentlessly
+        'name': 'OMEGA WARDEN', 'kind': 'city', 'theme': 2,
+        'tint': (255, 120, 220),
+        'hp': 18, 'speed': 2.4, 'ai': 9, 'style': 'cross',
+        'cols': 36,
+        'platforms': {11: [(4, 6), (30, 32)], 9: [(10, 13), (24, 27)], 7: [(17, 19)]},
+        'spikes': [8, 9, 14, 15, 16, 21, 22, 28, 29],
+        'enemies': [(10, 'robot'), (18, 'robot'), (26, 'robot'), (33, 'goomba')],
+        'coins': [(5, 10), (18, 6), (31, 10)],
+    },
+    {   # 10 - final boss: every attack, maximum intelligence
+        'name': 'JIN OVERLORD', 'kind': 'city', 'theme': CITY_THEME_INDEX,
+        'tint': (255, 80, 80),
+        'hp': 22, 'speed': 2.6, 'ai': 10, 'style': 'chaos',
+        'cols': 38,
+        'platforms': {12: [(5, 7), (31, 33)], 10: [(11, 14), (24, 27)],
+                      8: [(17, 21)], 6: [(13, 15), (23, 25)]},
+        'spikes': [9, 10, 15, 16, 22, 23, 28, 29, 30],
+        'enemies': [(11, 'robot'), (18, 'goomba'), (20, 'robot'),
+                    (27, 'robot'), (34, 'koopa')],
+        'coins': [(6, 11), (19, 7), (32, 11), (13, 5), (24, 5)],
+    },
+]
+
+
+def pvp_level_count():
+    return len(PVP_LEVELS)
+
+
+def build_pvp_level(level_num, sprites, seed=0):
+    """Build one PvP boss-rush arena from the PVP_LEVELS table. level_num is
+    1-based; values past the table length reuse the final (hardest) boss."""
+    import pygame
+
+    cfg = PVP_LEVELS[min(level_num, len(PVP_LEVELS)) - 1]
+
+    data = LevelData()
+    data.is_boss = True
+    data.theme_index = cfg['theme']
+    data.world_name = f"PVP {level_num}"
+    data.boss_name = cfg['name']
+    data.flagpole_x = 10 ** 9
+    data.castle_x = 10 ** 9
+    data.start_timer = 300
+
+    tile_group   = pygame.sprite.Group()
+    hazard_group = pygame.sprite.Group()
+    enemy_group  = pygame.sprite.Group()
+    coin_group   = pygame.sprite.Group()
+
+    COLS = cfg['cols']
+    data.level_width = max(SCREEN_WIDTH, COLS * TILE_SIZE)
+
+    # Ground.
+    for col in range(COLS):
+        tile_group.add(Tile(col * TILE_SIZE, 13 * TILE_SIZE, 'ground', sprites))
+        tile_group.add(Tile(col * TILE_SIZE, 14 * TILE_SIZE, 'ground', sprites))
+
+    # Side walls.
+    for r in range(6, 13):
+        tile_group.add(Tile(0, r * TILE_SIZE, 'solid', sprites))
+        tile_group.add(Tile((COLS - 1) * TILE_SIZE, r * TILE_SIZE, 'solid', sprites))
+
+    # Floating platforms / obstacles.
+    for row, spans in cfg.get('platforms', {}).items():
+        for (c0, c1) in spans:
+            for c in range(c0, c1 + 1):
+                tile_group.add(Tile(c * TILE_SIZE, row * TILE_SIZE, 'solid', sprites))
+
+    # Floor spikes (hazards the player must hop over).
+    for c in cfg.get('spikes', []):
+        hazard_group.add(Tile(c * TILE_SIZE, 12 * TILE_SIZE, 'spike', sprites))
+
+    # Coins.
+    for (c, r) in cfg.get('coins', []):
+        coin_group.add(Coin(c * TILE_SIZE + TILE_SIZE // 2,
+                            r * TILE_SIZE + TILE_SIZE // 2, sprites))
+
+    # Patrolling ground enemies (the "moving enemy on the ground").
+    speed_mult = 1.0 + 0.08 * level_num
+    for (c, etype) in cfg.get('enemies', []):
+        e = Enemy(c * TILE_SIZE, 11 * TILE_SIZE, etype, sprites)
+        base_speed = 1.8 if etype == 'robot' else 1.2
+        e.vx = -base_speed * speed_mult
+        e.shell_speed = 8.0 * speed_mult
+        enemy_group.add(e)
+
+    boss = Boss((COLS // 2) * TILE_SIZE, 13 * TILE_SIZE, sprites,
+                hp=cfg['hp'], speed=cfg['speed'], kind=cfg['kind'],
+                ai=cfg['ai'], style=cfg['style'], name=cfg['name'],
+                tint=cfg.get('tint'))
     boss.set_bounds(TILE_SIZE + 20, (COLS - 1) * TILE_SIZE - 20)
     data.boss = boss
 

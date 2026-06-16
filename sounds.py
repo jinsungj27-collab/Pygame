@@ -151,10 +151,44 @@ _MELODIES = [
 _music_channel = None
 _music_sounds  = {}
 
+# Tense, faster melodies used for boss battles. Each PvP boss cycles through
+# these so consecutive fights sound different; the final boss gets the last,
+# most menacing one.
+_BOSS_MELODIES = [
+    # 0 - driving minor march (classic beast)
+    ['E3', 'E3', 'G3', 'E3', 'A3', 'G3', 'E3', 'D3',
+     'E3', 'G3', 'B3', 'A3', 'G3', 'E3', 'B3', 'E3',
+     'C4', 'B3', 'G3', 'E3', 'A3', 'G3', 'E3', 'D3',
+     'E3', 'B3', 'G3', 'B3', 'E4', 'D4', 'B3', 'G3'],
+    # 1 - mechanical pulse (mech)
+    ['A3', 'A3', 'E4', 'A3', 'C4', 'A3', 'E4', 'A3',
+     'G3', 'G3', 'D4', 'G3', 'B3', 'G3', 'D4', 'G3',
+     'F3', 'F3', 'C4', 'F3', 'A3', 'F3', 'C4', 'F3',
+     'E3', 'B3', 'E4', 'G4', 'B4', 'A4', 'G4', 'E4'],
+    # 2 - frantic chase
+    ['D4', 'E4', 'F4', 'E4', 'D4', 'C4', 'D4', 'A3',
+     'D4', 'F4', 'A4', 'F4', 'E4', 'D4', 'C4', 'A3',
+     'B3', 'C4', 'D4', 'C4', 'B3', 'A3', 'G3', 'E3',
+     'A3', 'C4', 'E4', 'A4', 'G4', 'E4', 'C4', 'A3'],
+    # 3 - heavy stomp
+    ['C3', 'C3', 'R', 'C3', 'E3', 'R', 'G3', 'R',
+     'C3', 'C3', 'R', 'D3', 'F3', 'R', 'A3', 'R',
+     'B3', 'B3', 'R', 'D3', 'G3', 'R', 'B3', 'R',
+     'C3', 'E3', 'G3', 'C4', 'B3', 'G3', 'E3', 'C3'],
+    # 4 - final boss: relentless and dark
+    ['E3', 'F3', 'E3', 'D3', 'E3', 'G3', 'A3', 'B3',
+     'C4', 'B3', 'A3', 'G3', 'A3', 'B3', 'C4', 'D4',
+     'E4', 'D4', 'C4', 'B3', 'C4', 'A3', 'G3', 'E3',
+     'A3', 'C4', 'E4', 'G4', 'A4', 'G4', 'E4', 'C4'],
+]
+
 
 def _build_music_sound(theme_index, sample_rate=22050):
-    melody = _MELODIES[theme_index % len(_MELODIES)]
-    note_dur = 0.16
+    return _build_music_from(_MELODIES[theme_index % len(_MELODIES)],
+                             note_dur=0.16, sample_rate=sample_rate)
+
+
+def _build_music_from(melody, note_dur=0.16, sample_rate=22050):
     total_samples = int(sample_rate * note_dur * len(melody))
     buf = array.array('h', [0] * total_samples)
 
@@ -178,7 +212,7 @@ def _build_music_sound(theme_index, sample_rate=22050):
     return pygame.mixer.Sound(buffer=buf)
 
 
-def start_music(theme_index=0):
+def _play_cached(key, builder):
     global _music_channel
     try:
         if not pygame.mixer or not pygame.mixer.get_init():
@@ -186,9 +220,9 @@ def start_music(theme_index=0):
         if not settings.music_enabled:
             stop_music()
             return
-        if theme_index not in _music_sounds:
-            _music_sounds[theme_index] = _build_music_sound(theme_index)
-        snd = _music_sounds[theme_index]
+        if key not in _music_sounds:
+            _music_sounds[key] = builder()
+        snd = _music_sounds[key]
         if _music_channel is None:
             _music_channel = pygame.mixer.Channel(0)
         _music_channel.stop()
@@ -196,6 +230,18 @@ def start_music(theme_index=0):
         _music_channel.play(snd, loops=-1)
     except Exception:
         pass
+
+
+def start_music(theme_index=0):
+    _play_cached(theme_index, lambda: _build_music_sound(theme_index))
+
+
+def start_boss_music(boss_index=0):
+    """Play a boss battle theme. boss_index picks (and caches) one of the
+    tense boss melodies; it's played faster than overworld music."""
+    key = ('boss', boss_index % len(_BOSS_MELODIES))
+    _play_cached(key, lambda: _build_music_from(
+        _BOSS_MELODIES[boss_index % len(_BOSS_MELODIES)], note_dur=0.13))
 
 
 def stop_music():

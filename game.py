@@ -10,7 +10,10 @@ from constants import (
 from spritesheet import SpriteSheet
 from settings import settings
 from ui import Button, Slider, draw_vertical_gradient
-from levels import build_level, build_boss_level, is_boss_level, THEMES
+from levels import (
+    build_level, build_boss_level, build_pvp_level, is_boss_level,
+    pvp_level_count, THEMES,
+)
 from highscore import load_high_score, save_high_score
 from progress import load_progress, save_progress, default_progress
 from shop import ShopScreen, character_palette, get_character
@@ -18,17 +21,21 @@ import sounds
 from sounds import (
     play_coin_second_tone, sfx_powerup, sfx_powerup_spawn, sfx_stomp,
     sfx_clear, sfx_menu_select, sfx_pause, sfx_unpause, sfx_level_start,
-    sfx_hazard, sfx_firework, sfx_coin, start_music, stop_music, update_music_volume,
-    set_jump_profile,
+    sfx_hazard, sfx_firework, sfx_coin, start_music, start_boss_music,
+    stop_music, update_music_volume, set_jump_profile,
 )
 from entities import Player, Enemy, Item, Tile, Particle
 from legal import TOS_TEXT, LEGAL_TEXT
 
 
-MENU, INTRO, PLAYING, PAUSED, SETTINGS, CLEAR, GAMEOVER, TOS, LEGAL, SHOP = (
+MENU, INTRO, PLAYING, PAUSED, SETTINGS, CLEAR, GAMEOVER, TOS, LEGAL, SHOP, MODESELECT = (
     'menu', 'intro', 'playing', 'paused', 'settings', 'clear', 'gameover',
-    'tos', 'legal', 'shop'
+    'tos', 'legal', 'shop', 'modeselect'
 )
+
+# Game modes selected from the mode-select screen.
+MODE_ENDLESS = 'endless'
+MODE_PVP = 'pvp'
 
 # Each collected coin is worth this much toward the shop wallet (and the
 # per-run coin counter). Characters cost 10,000 and skins 5,000, so the grind
@@ -100,6 +107,9 @@ class Game:
         self.level_width = 3800
         self.is_boss = False
         self.boss = None
+        self.mode = MODE_ENDLESS
+        self.boss_name = None
+        self.victory = False
         self.projectile_group = pygame.sprite.Group()
         self.coin_group = pygame.sprite.Group()
         self.cleared_boss = False
@@ -128,6 +138,20 @@ class Game:
                                         icon='gear')
         self.btn_exit = Button(cx, 526, 260, 60, "EXIT", self.font_menu, icon='exit',
                                base_color=(120, 40, 40), hover_color=(170, 60, 60))
+
+        # MODE SELECT screen: two big picture buttons (Endless = Mario,
+        # PvP/Boss-Rush = Mech) plus a back button.
+        self.btn_mode_endless = Button(cx - 165, 350, 280, 240, "",
+                                       self.font_menu,
+                                       base_color=(28, 92, 140),
+                                       hover_color=(46, 130, 196))
+        self.btn_mode_pvp = Button(cx + 165, 350, 280, 240, "",
+                                   self.font_menu,
+                                   base_color=(140, 44, 52),
+                                   hover_color=(196, 64, 74))
+        self.btn_mode_back = Button(cx, 540, 200, 50, "BACK", self.font_menu,
+                                    icon='home', base_color=(110, 70, 30),
+                                    hover_color=(160, 110, 50))
 
         self.btn_resume   = Button(cx, 250, 280, 60, "RESUME", self.font_menu, icon='play',
                                    base_color=(30, 120, 60), hover_color=(50, 170, 90))
@@ -243,16 +267,24 @@ class Game:
         self.level_num = 1
         self.prev_high = self.high_score
         self.new_record = False
+        self.victory = False
         self.load_level(self.level_num)
         self._enter_intro()
 
     def load_level(self, level_num):
         seed = getattr(self, 'run_seed', 0)
-        self.is_boss = is_boss_level(level_num)
-        if self.is_boss:
-            self.level = build_boss_level(level_num, self.sprites, seed=seed)
+        self.boss_name = None
+        if self.mode == MODE_PVP:
+            # Boss-rush: every level is a boss battle.
+            self.is_boss = True
+            self.level = build_pvp_level(level_num, self.sprites, seed=seed)
+            self.boss_name = self.level.boss_name
         else:
-            self.level = build_level(level_num, self.sprites, seed=seed)
+            self.is_boss = is_boss_level(level_num)
+            if self.is_boss:
+                self.level = build_boss_level(level_num, self.sprites, seed=seed)
+            else:
+                self.level = build_level(level_num, self.sprites, seed=seed)
         self.theme = THEMES[self.level.theme_index]
 
         self.camera_x = 0
@@ -304,16 +336,41 @@ class Game:
         self.load_level(self.level_num)
         if preserved_hp is not None and self.boss is not None:
             self.boss.hp = preserved_hp
-        start_music(self.theme_index())
+        self._start_level_music()
 
     def theme_index(self):
         return self.level.theme_index if self.level else 0
 
+    def _start_level_music(self):
+        """Boss levels get a tense boss theme (per-boss in PvP); normal levels
+        use their overworld theme music."""
+        if self.is_boss:
+            if self.mode == MODE_PVP:
+                start_boss_music(self.level_num - 1)
+            else:
+                start_boss_music(self.level_num // 4)
+        else:
+            start_music(self.theme_index())
+
     def next_level(self):
         self.level_num += 1
         self.score += 2000
+        if self.mode == MODE_PVP and self.level_num > pvp_level_count():
+            self._on_victory()
+            return
         self.load_level(self.level_num)
         self._enter_intro()
+
+    def _on_victory(self):
+        """All PvP bosses cleared - show the game-over screen as a win."""
+        stop_music()
+        self.victory = True
+        self.new_record = self.score > self.prev_high
+        if self.score > self.high_score:
+            self.high_score = self.score
+        save_high_score(self.high_score)
+        self.persist_progress()
+        self.state = GAMEOVER
 
     def _enter_intro(self):
         self.state = INTRO
@@ -557,6 +614,7 @@ class Game:
         # truly ended (this is the only place coins are committed, which stops
         # death-respawn coin farming, especially with infinite lives).
         self.wallet += self.coins
+        self.victory = False
         self.new_record = self.score > self.prev_high
         if self.score > self.high_score:
             self.high_score = self.score
@@ -918,6 +976,49 @@ class Game:
         tip = self.font_small.render("v2.3.7  -  Enhanced Edition", True, (220, 220, 230))
         self.screen.blit(tip, (SCREEN_WIDTH // 2 - tip.get_width() // 2, 560))
 
+    def draw_modeselect(self):
+        self.menu_scroll += 0.6
+        self._draw_background(self.menu_scroll)
+        self._dim(110)
+
+        self._draw_title_banner("CHOOSE MODE", 70, color=(255, 220, 0), big=True)
+
+        mp = self._logical_mouse()
+        self.btn_mode_endless.update(mp)
+        self.btn_mode_pvp.update(mp)
+        self.btn_mode_back.update(mp)
+        self.btn_mode_endless.draw(self.screen)
+        self.btn_mode_pvp.draw(self.screen)
+
+        # Endless card: Mario logo + label.
+        mario = pygame.transform.scale(self.sprites.player_small['idle'], (88, 110))
+        self._draw_mode_card_content(
+            self.btn_mode_endless, mario, "ENDLESS",
+            "Classic run - bosses every", "4th stage", (180, 230, 255))
+
+        # PvP / Boss-Rush card: Mech logo + label.
+        mech = pygame.transform.scale(self.sprites.boss_city['walk1'], (118, 122))
+        self._draw_mode_card_content(
+            self.btn_mode_pvp, mech, "PvP  -  BOSS RUSH",
+            "10 bosses, each smarter", "and deadlier", (255, 200, 200))
+
+        self.btn_mode_back.draw(self.screen)
+
+    def _draw_mode_card_content(self, btn, logo, title, line1, line2, color):
+        r = btn.rect
+        # Logo near the top of the card.
+        self.screen.blit(logo, (r.centerx - logo.get_width() // 2, r.y + 24))
+        # Title.
+        t = self.font_menu.render(title, True, (255, 255, 255))
+        if t.get_width() > r.width - 16:
+            t = pygame.transform.smoothscale(
+                t, (r.width - 16, t.get_height()))
+        self.screen.blit(t, (r.centerx - t.get_width() // 2, r.bottom - 70))
+        # Two-line description.
+        for i, ln in enumerate((line1, line2)):
+            d = self.font_small.render(ln, True, color)
+            self.screen.blit(d, (r.centerx - d.get_width() // 2, r.bottom - 42 + i * 18))
+
     def _draw_card(self, cx, cy, w, h, accent, fill=(18, 21, 36), alpha=215):
         """Draw a modern rounded translucent panel with an accent border."""
         rect = pygame.Rect(0, 0, w, h)
@@ -931,6 +1032,8 @@ class Game:
         return rect
 
     def _boss_name(self):
+        if self.boss_name:
+            return self.boss_name
         return "MEGA MECH" if self.is_boss and self.theme.get('city') else "GORTHRAX"
 
     def draw_intro(self):
@@ -944,8 +1047,13 @@ class Game:
             self._draw_title_banner("BOSS BATTLE", rect.y + 40, color=accent)
             nm = self.font_title.render(self._boss_name(), True, (255, 220, 130))
             self.screen.blit(nm, (cx - nm.get_width() // 2, rect.y + 128))
-            tip = self.font_menu.render("Stomp it to win!", True, (235, 235, 245))
-            self.screen.blit(tip, (cx - tip.get_width() // 2, rect.y + 182))
+            if self.mode == MODE_PVP:
+                sub = self.font_menu.render(
+                    f"PvP   Level {self.level_num} / {pvp_level_count()}",
+                    True, (255, 170, 170))
+            else:
+                sub = self.font_menu.render("Stomp it to win!", True, (235, 235, 245))
+            self.screen.blit(sub, (cx - sub.get_width() // 2, rect.y + 182))
         else:
             accent = tuple(self.theme.get('sun', (255, 220, 0)))[:3]
             rect = self._draw_card(cx, cy, 560, 300, accent)
@@ -1135,7 +1243,12 @@ class Game:
     def draw_gameover(self):
         self._draw_background(self.camera_x)
         self._dim(190)
-        self._draw_title_banner("GAME OVER", 110, color=(220, 40, 40))
+        if self.victory:
+            self._draw_title_banner("YOU WIN!", 110, color=(120, 255, 140))
+            sub = self.font_menu.render("All 10 bosses defeated!", True, (255, 220, 90))
+            self.screen.blit(sub, (SCREEN_WIDTH // 2 - sub.get_width() // 2, 168))
+        else:
+            self._draw_title_banner("GAME OVER", 110, color=(220, 40, 40))
         sc = self.font_menu.render(f"Score: {self.score:06d}", True, (255, 255, 255))
         self.screen.blit(sc, (SCREEN_WIDTH // 2 - sc.get_width() // 2, 200))
         hs = self.font_menu.render(f"High Score: {self.high_score:06d}", True, (255, 220, 90))
@@ -1173,6 +1286,8 @@ class Game:
 
             if self.state == MENU:
                 self._events_menu(event)
+            elif self.state == MODESELECT:
+                self._events_modeselect(event)
             elif self.state == PLAYING:
                 self._events_playing(event)
             elif self.state == PAUSED:
@@ -1194,7 +1309,7 @@ class Game:
     def _events_menu(self, event):
         if self.btn_play.is_clicked(event):
             sfx_menu_select()
-            self.start_new_game()
+            self.state = MODESELECT
         elif self.btn_menu_settings.is_clicked(event):
             sfx_menu_select()
             self.settings_return = MENU
@@ -1209,7 +1324,25 @@ class Game:
             self._quit()
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
             sfx_menu_select()
+            self.state = MODESELECT
+
+    def _events_modeselect(self, event):
+        if event.type == pygame.KEYDOWN and event.key in (
+                pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            sfx_menu_select()
+            self.state = MENU
+            return
+        if self.btn_mode_endless.is_clicked(event):
+            sfx_menu_select()
+            self.mode = MODE_ENDLESS
             self.start_new_game()
+        elif self.btn_mode_pvp.is_clicked(event):
+            sfx_menu_select()
+            self.mode = MODE_PVP
+            self.start_new_game()
+        elif self.btn_mode_back.is_clicked(event):
+            sfx_menu_select()
+            self.state = MENU
 
     def _events_playing(self, event):
         if event.type == pygame.KEYDOWN:
@@ -1371,7 +1504,7 @@ class Game:
                 event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN):
             sfx_menu_select()
             self.start_new_game()
-            start_music(self.theme_index())
+            self._start_level_music()
         elif self.btn_go_menu.is_clicked(event):
             sfx_menu_select()
             self.state = MENU
@@ -1471,10 +1604,12 @@ class Game:
                 self.intro_timer -= 1
                 if self.intro_timer <= 0:
                     self.state = PLAYING
-                    start_music(self.theme_index())
+                    self._start_level_music()
 
             if self.state == MENU:
                 self.draw_menu()
+            elif self.state == MODESELECT:
+                self.draw_modeselect()
             elif self.state == INTRO:
                 self.draw_intro()
             elif self.state == PLAYING:
