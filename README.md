@@ -1,4 +1,4 @@
-# Super Jin - Enhanced Edition v2.2.0
+# Super Jin - Enhanced Edition v2.3.1
 
 A fully-featured 2D platformer built from scratch in Python with pygame. Features endless procedurally-generated levels with parkour, boss battles, flying enemies, collectible coins, themed parallax backgrounds, a complete menu/settings system, and persistent high scores — all with zero external assets (graphics and music are synthesized at runtime).
 

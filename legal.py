@@ -8,7 +8,7 @@ blank strings are used to create vertical spacing between sections.
 """
 
 GAME_NAME = "JIN"
-GAME_VERSION = "v2.2.0 - Enhanced Edition"
+GAME_VERSION = "v2.3.1 - Enhanced Edition"
 
 TOS_TEXT = [
     "TERMS OF SERVICE",
