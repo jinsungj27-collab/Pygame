@@ -12,18 +12,28 @@ from settings import settings
 from ui import Button, Slider, draw_vertical_gradient
 from levels import build_level, build_boss_level, is_boss_level, THEMES
 from highscore import load_high_score, save_high_score
+from progress import load_progress, save_progress
+from shop import ShopScreen, character_palette, get_character
 import sounds
 from sounds import (
     play_coin_second_tone, sfx_powerup, sfx_powerup_spawn, sfx_stomp,
     sfx_clear, sfx_menu_select, sfx_pause, sfx_unpause, sfx_level_start,
     sfx_hazard, sfx_firework, sfx_coin, start_music, stop_music, update_music_volume,
+    set_jump_profile,
 )
 from entities import Player, Enemy, Item, Tile, Particle
+from legal import TOS_TEXT, LEGAL_TEXT
 
 
-MENU, INTRO, PLAYING, PAUSED, SETTINGS, CLEAR, GAMEOVER = (
-    'menu', 'intro', 'playing', 'paused', 'settings', 'clear', 'gameover'
+MENU, INTRO, PLAYING, PAUSED, SETTINGS, CLEAR, GAMEOVER, TOS, LEGAL, SHOP = (
+    'menu', 'intro', 'playing', 'paused', 'settings', 'clear', 'gameover',
+    'tos', 'legal', 'shop'
 )
+
+# Each collected coin is worth this much toward the shop wallet (and the
+# per-run coin counter). Characters cost 10,000 and skins 5,000, so the grind
+# stays meaningful.
+COIN_VALUE = 50
 
 
 class Game:
@@ -71,6 +81,10 @@ class Game:
         self.prev_high  = self.high_score
         self.new_record = False
 
+        # Persistent shop progress: coin wallet + owned/equipped characters.
+        self.progress = load_progress()
+        self.wallet = self.progress.get('wallet', 0)
+
         self.state = MENU
 
         self.clouds = [(random.randint(0, 4000), random.randint(40, 200),
@@ -96,16 +110,22 @@ class Game:
         self.level = None
         self._build_ui()
 
+        # Build the shop UI and apply the equipped character's look + sound.
+        self.shop = ShopScreen(self)
+        self.apply_selected_character()
+
         start_music(0)
 
     def _build_ui(self):
         cx = SCREEN_WIDTH // 2
 
-        self.btn_play = Button(cx, 350, 260, 62, "PLAY", self.font_menu, icon='play',
+        self.btn_play = Button(cx, 322, 260, 60, "PLAY", self.font_menu, icon='play',
                                base_color=(30, 120, 60), hover_color=(50, 170, 90))
-        self.btn_menu_settings = Button(cx, 420, 260, 62, "SETTINGS", self.font_menu,
+        self.btn_shop = Button(cx, 390, 260, 60, "SHOP", self.font_menu, icon='shop',
+                               base_color=(150, 110, 30), hover_color=(200, 150, 50))
+        self.btn_menu_settings = Button(cx, 458, 260, 60, "SETTINGS", self.font_menu,
                                         icon='gear')
-        self.btn_exit = Button(cx, 490, 260, 62, "EXIT", self.font_menu, icon='exit',
+        self.btn_exit = Button(cx, 526, 260, 60, "EXIT", self.font_menu, icon='exit',
                                base_color=(120, 40, 40), hover_color=(170, 60, 60))
 
         self.btn_resume   = Button(cx, 250, 280, 60, "RESUME", self.font_menu, icon='play',
@@ -118,9 +138,21 @@ class Game:
                                    value=settings.music_volume)
         self.slider_sfx   = Slider(cx - 150, 320, 300, "Sound Effects", self.font_small,
                                    value=settings.sfx_volume)
-        self.btn_music_toggle = Button(cx, 376, 280, 48, self._music_label(), self.font_small)
-        self.btn_display  = Button(cx, 430, 280, 48, self._display_label(), self.font_small)
-        self.btn_back = Button(cx, 492, 200, 54, "BACK", self.font_menu)
+        self.btn_music_toggle = Button(cx, 372, 280, 46, self._music_label(), self.font_small)
+        self.btn_display  = Button(cx, 424, 280, 46, self._display_label(), self.font_small)
+        self.btn_tos   = Button(cx - 100, 476, 188, 44, "TERMS OF SERVICE",
+                                self.font_small,
+                                base_color=(50, 50, 80), hover_color=(80, 80, 130))
+        self.btn_legal = Button(cx + 100, 476, 188, 44, "LEGAL", self.font_small,
+                                base_color=(50, 50, 80), hover_color=(80, 80, 130))
+        self.btn_back = Button(cx, 532, 200, 50, "BACK", self.font_menu)
+
+        # Shared BACK button for the TOS / Legal reading screens.
+        self.btn_doc_back = Button(cx, 552, 200, 44, "BACK", self.font_menu)
+        # Vertical scroll offsets for the document reading screens.
+        self.tos_scroll = 0.0
+        self.legal_scroll = 0.0
+        self._doc_max_scroll = 0.0
 
         self.btn_retry    = Button(cx, 340, 260, 60, "RETRY", self.font_menu, icon='play',
                                    base_color=(30, 120, 60), hover_color=(50, 170, 90))
@@ -132,6 +164,22 @@ class Game:
 
     def _display_label(self):
         return f"Screen: {self.display_modes[settings.display_mode][0]}"
+
+    def apply_selected_character(self):
+        """Recolor the player sprites and set the jump sound for the equipped
+        character + skin stored in self.progress."""
+        char_id = self.progress['selected_character']
+        skin_id = self.progress['selected_skin']
+        palette = character_palette(char_id, skin_id)
+        self.sprites.apply_character(palette)
+        char = get_character(char_id)
+        freqs, wave = char.get('jump', ([160, 680, 820], 'square'))
+        set_jump_profile(freqs, wave)
+
+    def persist_progress(self):
+        """Sync the wallet into the progress dict and write it to disk."""
+        self.progress['wallet'] = self.wallet
+        save_progress(self.progress)
 
     def start_new_game(self):
         self.score     = 0
@@ -239,7 +287,8 @@ class Game:
             self.player.take_damage()
 
         for coin in pygame.sprite.spritecollide(self.player, self.coin_group, True):
-            self.coins += 1
+            self.coins += COIN_VALUE
+            self.wallet += COIN_VALUE
             self.score += 200
             sfx_coin()
             self.particle_group.add(
@@ -297,7 +346,8 @@ class Game:
 
         if tile.tile_type == 'question':
             if tile.contains_item == 'coin':
-                self.coins += 1
+                self.coins += COIN_VALUE
+                self.wallet += COIN_VALUE
                 self.score += 200
                 self.item_group.add(Item(tile.rect.x, tile.rect.y, 'coin', self.sprites))
                 self.particle_group.add(
@@ -394,6 +444,7 @@ class Game:
         if self.score > self.high_score:
             self.high_score = self.score
         save_high_score(self.high_score)
+        self.persist_progress()
         self.state = GAMEOVER
 
     def update_playing(self):
@@ -510,29 +561,85 @@ class Game:
         pygame.draw.ellipse(self.screen, color, (x + w * 0.45, y - h * 0.2, w * 0.6, h))
 
     def _draw_hud(self):
-        score_text = self.font_hud.render(
-            "MARIO      COINS      WORLD      TIME", True, (255, 255, 255)
-        )
-        vals_text = self.font_hud.render(
-            f"{self.score:06d}      o x {self.coins:02d}      {self.level.world_name}"
-            f"        {max(0, self.timer):03d}",
-            True, (255, 255, 255),
-        )
-        self.screen.blit(score_text, (40, 20))
-        self.screen.blit(vals_text,  (40, 45))
+        # Modern translucent stat cards laid out along the top.
+        low_time = max(0, self.timer) <= 50
+        if low_time and (pygame.time.get_ticks() // 300) % 2 == 0:
+            time_color = (255, 90, 90)
+        elif low_time:
+            time_color = (255, 150, 120)
+        else:
+            time_color = (235, 240, 255)
 
-        frame    = (pygame.time.get_ticks() // 250) % 2
-        coin_img = self.sprites.items['coin1'] if frame == 0 else self.sprites.items['coin2']
-        self.screen.blit(pygame.transform.scale(coin_img, (16, 16)), (230, 48))
+        cards = [
+            ('SCORE', f"{self.score:06d}", (255, 255, 255), None),
+            ('COINS', f"{self.coins}",     (255, 215, 70),  'coin'),
+            ('LEVEL', f"{self.level_num}", (120, 215, 255), None),
+            ('TIME',  f"{max(0, self.timer)}", time_color,  None),
+        ]
 
-        lives_img = pygame.transform.scale(self.sprites.player_small['idle'], (20, 24))
-        self.screen.blit(lives_img, (SCREEN_WIDTH - 120, 25))
-        self.screen.blit(
-            self.font_hud.render(f"x {self.lives}", True, (255, 255, 255)),
-            (SCREEN_WIDTH - 90, 25),
-        )
-        hint = self.font_small.render("Esc = Pause", True, (255, 255, 255))
-        self.screen.blit(hint, (SCREEN_WIDTH - 110, 52))
+        x, y, h = 18, 14, 52
+        for label, value, color, icon in cards:
+            w = self._measure_card(label, value, icon)
+            self._draw_hud_card(x, y, w, h, label, value, color, icon)
+            x += w + 10
+
+        self._draw_lives_card(y, h)
+
+    def _measure_card(self, label, value, icon):
+        lbl_w = self.font_small.size(label)[0]
+        val_w = self.font_hud.size(value)[0]
+        icon_w = 24 if icon else 0
+        return max(lbl_w, val_w + icon_w) + 24
+
+    def _draw_hud_card(self, x, y, w, h, label, value, value_color, icon=None):
+        panel = pygame.Surface((w, h), pygame.SRCALPHA)
+        # One uniform navy-blue highlight across the whole card (top included).
+        pygame.draw.rect(panel, (30, 52, 122, 225), (0, 0, w, h), border_radius=11)
+        pygame.draw.rect(panel, (120, 160, 240, 170), (0, 0, w, h), width=2,
+                         border_radius=11)
+        self.screen.blit(panel, (x, y))
+
+        lbl = self.font_small.render(label, True, (175, 198, 240))
+        self.screen.blit(lbl, (x + 12, y + 6))
+
+        vx = x + 12
+        if icon == 'coin':
+            frame = (pygame.time.get_ticks() // 250) % 2
+            coin = self.sprites.items['coin1'] if frame == 0 else self.sprites.items['coin2']
+            self.screen.blit(pygame.transform.scale(coin, (18, 18)), (vx, y + 27))
+            vx += 24
+        val = self.font_hud.render(value, True, value_color)
+        self.screen.blit(val, (vx, y + 27))
+
+    def _draw_lives_card(self, y, h):
+        value = f"x {self.lives}"
+        val_w = self.font_hud.size(value)[0]
+        w = val_w + 24 + 22  # heart + spacing + value
+        x = SCREEN_WIDTH - w - 18
+
+        panel = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(panel, (30, 52, 122, 225), (0, 0, w, h), border_radius=11)
+        pygame.draw.rect(panel, (120, 160, 240, 170), (0, 0, w, h), width=2,
+                         border_radius=11)
+        self.screen.blit(panel, (x, y))
+
+        lbl = self.font_small.render("LIVES", True, (175, 198, 240))
+        self.screen.blit(lbl, (x + 12, y + 6))
+
+        self._draw_heart(x + 12, y + 28, 18)
+        val = self.font_hud.render(value, True, (255, 255, 255))
+        self.screen.blit(val, (x + 12 + 24, y + 27))
+
+    def _draw_heart(self, x, y, s):
+        """Draw a small heart with its top edge at y, fitting in an s x s box."""
+        r = s // 4
+        red, dark = (235, 60, 80), (150, 25, 45)
+        pygame.draw.circle(self.screen, red, (x + r, y + r), r)
+        pygame.draw.circle(self.screen, red, (x + s - r, y + r), r)
+        pygame.draw.polygon(self.screen, red,
+                            [(x, y + r), (x + s, y + r), (x + s // 2, y + s)])
+        # A soft white glint for a bit of polish.
+        pygame.draw.circle(self.screen, (255, 180, 195), (x + r - 1, y + r - 2), max(1, r // 3))
 
     def _draw_flagpole_and_castle(self):
         px = self.flagpole_x - self.camera_x
@@ -606,10 +713,10 @@ class Game:
         self._draw_title_banner("JIN", 165 + int(bob), color=(255, 220, 0))
 
         hs = self.font_menu.render(f"HIGH SCORE  {self.high_score:06d}", True, (255, 220, 90))
-        self.screen.blit(hs, (SCREEN_WIDTH // 2 - hs.get_width() // 2, 270))
+        self.screen.blit(hs, (SCREEN_WIDTH // 2 - hs.get_width() // 2, 250))
 
         mp = self._logical_mouse()
-        for b in (self.btn_play, self.btn_menu_settings, self.btn_exit):
+        for b in (self.btn_play, self.btn_shop, self.btn_menu_settings, self.btn_exit):
             b.update(mp)
             b.draw(self.screen)
 
@@ -670,9 +777,74 @@ class Game:
         mp = self._logical_mouse()
         self.btn_music_toggle.label = self._music_label()
         self.btn_display.label = self._display_label()
-        for b in (self.btn_music_toggle, self.btn_display, self.btn_back):
+        for b in (self.btn_music_toggle, self.btn_display,
+                  self.btn_tos, self.btn_legal, self.btn_back):
             b.update(mp)
             b.draw(self.screen)
+
+    def _draw_document(self, title, lines, scroll):
+        """Render a scrollable block of text (used by TOS and Legal screens)."""
+        if self.settings_return == MENU:
+            self._draw_background(self.menu_scroll)
+        else:
+            self._draw_world()
+        self._dim(190)
+        self._draw_title_banner(title, 40, color=(255, 220, 0), big=False)
+
+        # The reading viewport (text is clipped to this region while scrolling).
+        view = pygame.Rect(SCREEN_WIDTH // 2 - 340, 110, 680, 380)
+        pygame.draw.rect(self.screen, (12, 14, 30), view, border_radius=10)
+        pygame.draw.rect(self.screen, (90, 100, 150), view, width=2, border_radius=10)
+
+        line_h = 22
+        content_h = len(lines) * line_h
+        self._doc_max_scroll = max(0.0, content_h - (view.height - 24))
+        scroll = max(0.0, min(scroll, self._doc_max_scroll))
+
+        prev_clip = self.screen.get_clip()
+        self.screen.set_clip(view)
+        y = view.y + 12 - int(scroll)
+        for line in lines:
+            if y + line_h >= view.y and y <= view.bottom:
+                if line and line == line.upper() and not line.startswith(" ") \
+                        and len(line) > 2 and not line[0].isdigit():
+                    color = (255, 220, 120)  # section headings
+                elif line[:2].strip().isdigit() or (line and line[0].isdigit()):
+                    color = (160, 220, 255)  # numbered clauses
+                else:
+                    color = (220, 225, 240)
+                txt = self.font_small.render(line, True, color)
+                self.screen.blit(txt, (view.x + 18, y))
+            y += line_h
+        self.screen.set_clip(prev_clip)
+
+        # Scrollbar indicator on the right edge of the viewport.
+        if self._doc_max_scroll > 0:
+            track = pygame.Rect(view.right - 10, view.y + 6, 5, view.height - 12)
+            pygame.draw.rect(self.screen, (40, 45, 70), track, border_radius=3)
+            frac = view.height / (content_h + 24)
+            bar_h = max(24, int(track.height * frac))
+            bar_y = track.y + int((track.height - bar_h) *
+                                  (scroll / self._doc_max_scroll))
+            pygame.draw.rect(self.screen, (140, 160, 220),
+                             (track.x, bar_y, track.width, bar_h), border_radius=3)
+
+        hint = self.font_small.render(
+            "Scroll: Mouse Wheel / Up-Down arrows", True, (180, 185, 205))
+        self.screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, view.bottom + 6))
+
+        mp = self._logical_mouse()
+        self.btn_doc_back.update(mp)
+        self.btn_doc_back.draw(self.screen)
+        return scroll
+
+    def draw_tos(self):
+        self.tos_scroll = self._draw_document(
+            "TERMS OF SERVICE", TOS_TEXT, self.tos_scroll)
+
+    def draw_legal(self):
+        self.legal_scroll = self._draw_document(
+            "LEGAL", LEGAL_TEXT, self.legal_scroll)
 
     def draw_clear(self):
         self._draw_world()
@@ -735,6 +907,10 @@ class Game:
                 self._events_paused(event)
             elif self.state == SETTINGS:
                 self._events_settings(event)
+            elif self.state == SHOP:
+                self._events_shop(event)
+            elif self.state in (TOS, LEGAL):
+                self._events_document(event)
             elif self.state == CLEAR:
                 self._events_clear(event)
             elif self.state == GAMEOVER:
@@ -753,6 +929,9 @@ class Game:
             self.slider_music.value = settings.music_volume
             self.slider_sfx.value   = settings.sfx_volume
             self.state = SETTINGS
+        elif self.btn_shop.is_clicked(event):
+            sfx_menu_select()
+            self.state = SHOP
         elif self.btn_exit.is_clicked(event):
             self._quit()
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
@@ -807,9 +986,50 @@ class Game:
         elif self.btn_display.is_clicked(event):
             sfx_menu_select()
             self._cycle_display_mode()
+        elif self.btn_tos.is_clicked(event):
+            sfx_menu_select()
+            self.tos_scroll = 0.0
+            self.state = TOS
+        elif self.btn_legal.is_clicked(event):
+            sfx_menu_select()
+            self.legal_scroll = 0.0
+            self.state = LEGAL
         elif self.btn_back.is_clicked(event):
             sfx_menu_select()
             self.state = self.settings_return
+
+    def _events_shop(self, event):
+        if self.shop.handle_event(event):
+            self.persist_progress()
+            self.state = MENU
+
+    def _events_document(self, event):
+        """Shared event handling for the TOS / Legal reading screens."""
+        if event.type == pygame.KEYDOWN and event.key in (
+                pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            sfx_menu_select()
+            self.state = SETTINGS
+            return
+        if self.btn_doc_back.is_clicked(event):
+            sfx_menu_select()
+            self.state = SETTINGS
+            return
+
+        scroll_attr = 'tos_scroll' if self.state == TOS else 'legal_scroll'
+        cur = getattr(self, scroll_attr)
+        if event.type == pygame.MOUSEWHEEL:
+            cur -= event.y * 40
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_DOWN:
+                cur += 40
+            elif event.key == pygame.K_UP:
+                cur -= 40
+            elif event.key == pygame.K_PAGEDOWN:
+                cur += 240
+            elif event.key == pygame.K_PAGEUP:
+                cur -= 240
+        cur = max(0.0, min(cur, self._doc_max_scroll))
+        setattr(self, scroll_attr, cur)
 
     def _events_clear(self, event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
@@ -896,6 +1116,10 @@ class Game:
             save_high_score(max(self.high_score, self.score))
         except Exception:
             pass
+        try:
+            self.persist_progress()
+        except Exception:
+            pass
         pygame.quit()
         sys.exit()
 
@@ -924,6 +1148,12 @@ class Game:
                 self.draw_pause()
             elif self.state == SETTINGS:
                 self.draw_settings()
+            elif self.state == SHOP:
+                self.shop.draw()
+            elif self.state == TOS:
+                self.draw_tos()
+            elif self.state == LEGAL:
+                self.draw_legal()
             elif self.state == CLEAR:
                 self.draw_clear()
             elif self.state == GAMEOVER:

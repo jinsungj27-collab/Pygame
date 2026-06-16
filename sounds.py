@@ -51,7 +51,20 @@ def play_synth_sound(freq_list, duration, wav_type='square', volume=0.08, sample
 
 
 def sfx_jump():
-    play_synth_sound([160, 680, 820], 0.18, 'square', volume=0.08)
+    play_synth_sound(_jump_profile, 0.18, _jump_wave, volume=0.08)
+
+
+# The currently equipped character's jump sound. Characters override this via
+# set_jump_profile() so each one sounds distinct.
+_jump_profile = [160, 680, 820]
+_jump_wave = 'square'
+
+
+def set_jump_profile(freqs, wave='square'):
+    global _jump_profile, _jump_wave
+    if freqs:
+        _jump_profile = list(freqs)
+    _jump_wave = wave
 
 def sfx_coin():
     play_synth_sound([988], 0.07, 'sine', volume=0.1)

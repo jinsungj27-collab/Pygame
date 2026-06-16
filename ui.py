@@ -80,6 +80,12 @@ class Button:
         elif self.icon == 'exit':
             pygame.draw.line(surface, (255, 120, 120), (ix - 8, cy - 8), (ix + 8, cy + 8), 4)
             pygame.draw.line(surface, (255, 120, 120), (ix + 8, cy - 8), (ix - 8, cy + 8), 4)
+        elif self.icon == 'shop':
+            # A little shopping cart.
+            pygame.draw.rect(surface, (255, 230, 150), (ix - 9, cy - 7, 15, 10), 2)
+            pygame.draw.line(surface, (255, 230, 150), (ix - 11, cy - 9), (ix - 9, cy - 7), 3)
+            pygame.draw.circle(surface, (255, 230, 150), (ix - 6, cy + 8), 2)
+            pygame.draw.circle(surface, (255, 230, 150), (ix + 4, cy + 8), 2)
 
 
 class Slider:

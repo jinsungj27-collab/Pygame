@@ -16,8 +16,8 @@ from sprites import (
 _SCALE = 2.5
 
 
-def _make(data, flip_x=False):
-    return make_sprite(data, scale=_SCALE, flip_x=flip_x)
+def _make(data, flip_x=False, palette=None):
+    return make_sprite(data, scale=_SCALE, flip_x=flip_x, palette=palette)
 
 
 def _make_boss(frame):
@@ -90,38 +90,7 @@ def _make_bird(frame):
 
 class SpriteSheet:
     def __init__(self):
-        self.player_small = {
-            'idle':  _make(SMALL_MARIO_IDLE),
-            'walk1': _make(SMALL_MARIO_WALK1),
-            'walk2': _make(SMALL_MARIO_WALK2),
-            'walk3': _make(SMALL_MARIO_WALK3),
-            'jump':  _make(SMALL_MARIO_JUMP),
-            'duck':  _make(SMALL_MARIO_DUCK),
-        }
-        self.player_small_left = {
-            'idle':  _make(SMALL_MARIO_IDLE,  flip_x=True),
-            'walk1': _make(SMALL_MARIO_WALK1, flip_x=True),
-            'walk2': _make(SMALL_MARIO_WALK2, flip_x=True),
-            'walk3': _make(SMALL_MARIO_WALK3, flip_x=True),
-            'jump':  _make(SMALL_MARIO_JUMP,  flip_x=True),
-            'duck':  _make(SMALL_MARIO_DUCK,  flip_x=True),
-        }
-        self.player_big = {
-            'idle':  _make(BIG_MARIO_IDLE),
-            'walk1': _make(BIG_MARIO_WALK1),
-            'walk2': _make(BIG_MARIO_WALK2),
-            'walk3': _make(BIG_MARIO_WALK3),
-            'jump':  _make(BIG_MARIO_JUMP),
-            'duck':  _make(BIG_MARIO_DUCK),
-        }
-        self.player_big_left = {
-            'idle':  _make(BIG_MARIO_IDLE,  flip_x=True),
-            'walk1': _make(BIG_MARIO_WALK1, flip_x=True),
-            'walk2': _make(BIG_MARIO_WALK2, flip_x=True),
-            'walk3': _make(BIG_MARIO_WALK3, flip_x=True),
-            'jump':  _make(BIG_MARIO_JUMP,  flip_x=True),
-            'duck':  _make(BIG_MARIO_DUCK,  flip_x=True),
-        }
+        self.apply_character(None)
 
         self.blocks = {
             'ground':    _make(BLOCK_GROUND),
@@ -163,3 +132,47 @@ class SpriteSheet:
             'fly1_r': pygame.transform.flip(_make_bird(0), True, False),
             'fly2_r': pygame.transform.flip(_make_bird(1), True, False),
         }
+
+    def apply_character(self, palette):
+        """Rebuild the player sprite sets recolored with the given palette.
+
+        palette maps palette chars to RGB colors. Passing None uses the
+        original Mario colors. This is called whenever the player equips a
+        different character or skin in the Shop.
+        """
+        self.player_small = {
+            'idle':  _make(SMALL_MARIO_IDLE,  palette=palette),
+            'walk1': _make(SMALL_MARIO_WALK1, palette=palette),
+            'walk2': _make(SMALL_MARIO_WALK2, palette=palette),
+            'walk3': _make(SMALL_MARIO_WALK3, palette=palette),
+            'jump':  _make(SMALL_MARIO_JUMP,  palette=palette),
+            'duck':  _make(SMALL_MARIO_DUCK,  palette=palette),
+        }
+        self.player_small_left = {
+            'idle':  _make(SMALL_MARIO_IDLE,  flip_x=True, palette=palette),
+            'walk1': _make(SMALL_MARIO_WALK1, flip_x=True, palette=palette),
+            'walk2': _make(SMALL_MARIO_WALK2, flip_x=True, palette=palette),
+            'walk3': _make(SMALL_MARIO_WALK3, flip_x=True, palette=palette),
+            'jump':  _make(SMALL_MARIO_JUMP,  flip_x=True, palette=palette),
+            'duck':  _make(SMALL_MARIO_DUCK,  flip_x=True, palette=palette),
+        }
+        self.player_big = {
+            'idle':  _make(BIG_MARIO_IDLE,  palette=palette),
+            'walk1': _make(BIG_MARIO_WALK1, palette=palette),
+            'walk2': _make(BIG_MARIO_WALK2, palette=palette),
+            'walk3': _make(BIG_MARIO_WALK3, palette=palette),
+            'jump':  _make(BIG_MARIO_JUMP,  palette=palette),
+            'duck':  _make(BIG_MARIO_DUCK,  palette=palette),
+        }
+        self.player_big_left = {
+            'idle':  _make(BIG_MARIO_IDLE,  flip_x=True, palette=palette),
+            'walk1': _make(BIG_MARIO_WALK1, flip_x=True, palette=palette),
+            'walk2': _make(BIG_MARIO_WALK2, flip_x=True, palette=palette),
+            'walk3': _make(BIG_MARIO_WALK3, flip_x=True, palette=palette),
+            'jump':  _make(BIG_MARIO_JUMP,  flip_x=True, palette=palette),
+            'duck':  _make(BIG_MARIO_DUCK,  flip_x=True, palette=palette),
+        }
+
+    def make_preview(self, palette, scale=3):
+        """A single idle sprite recolored with palette, for shop thumbnails."""
+        return make_sprite(SMALL_MARIO_IDLE, scale=scale, palette=palette)

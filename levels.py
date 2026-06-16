@@ -160,7 +160,7 @@ def build_level(level_num, sprites):
     data.flagpole_x = flag_col * TILE_SIZE
     data.flagpole_y = TILE_SIZE * 3
     data.castle_x   = (flag_col + 4) * TILE_SIZE
-    data.start_timer = max(300, int(COLS * 2.2) - 8 * diff)
+    data.start_timer = 300
 
     SAFE_START = 11
     SAFE_END   = flag_col - 2
@@ -261,7 +261,7 @@ def build_boss_level(level_num, sprites):
     data.flagpole_x = 10 ** 9
     data.castle_x = 10 ** 9
     boss_round = level_num // 4
-    data.start_timer = max(180, 320 - 20 * boss_round)
+    data.start_timer = 300
 
     tile_group   = pygame.sprite.Group()
     hazard_group = pygame.sprite.Group()
