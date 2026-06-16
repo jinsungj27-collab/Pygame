@@ -69,8 +69,8 @@ class Boss(pygame.sprite.Sprite):
         self.on_ground = False
 
         self.anim_frame = 0.0
-        self.shoot_timer = 110
-        self.jump_timer = random.randint(120, 220)
+        self.shoot_timer = 150
+        self.jump_timer = random.randint(160, 260)
 
         self.left_bound = 80
         self.right_bound = 720
@@ -120,15 +120,15 @@ class Boss(pygame.sprite.Sprite):
         self.jump_timer -= 1
         if self.jump_timer <= 0 and self.on_ground:
             self.vy = -11
-            self.jump_timer = random.randint(140, 240)
+            self.jump_timer = random.randint(180, 300)
 
         self.shoot_timer -= 1
         if self.shoot_timer <= 0:
-            self.shoot_timer = random.randint(70, 130)
+            self.shoot_timer = random.randint(110, 180)
             direction = -1 if player.x < self.x else 1
             fb = Fireball(self.rect.centerx + direction * 30,
                           self.rect.top + 30,
-                          direction * 4.2, -3.0)
+                          direction * 3.6, -3.0)
             projectiles.add(fb)
             sfx_hazard()
 

@@ -12,7 +12,7 @@ from settings import settings
 from ui import Button, Slider, draw_vertical_gradient
 from levels import build_level, build_boss_level, is_boss_level, THEMES
 from highscore import load_high_score, save_high_score
-from progress import load_progress, save_progress
+from progress import load_progress, save_progress, default_progress
 from shop import ShopScreen, character_palette, get_character
 import sounds
 from sounds import (
@@ -76,6 +76,7 @@ class Game:
         self.score     = 0
         self.coins     = 0
         self.lives     = 3
+        self.infinite_lives = False
         self.level_num = 1
         self.high_score = load_high_score()
         self.prev_high  = self.high_score
@@ -134,18 +135,42 @@ class Game:
         self.btn_mainmenu = Button(cx, 400, 280, 60, "MAIN MENU", self.font_menu, icon='home',
                                    base_color=(110, 70, 30), hover_color=(160, 110, 50))
 
-        self.slider_music = Slider(cx - 150, 255, 300, "Music Volume", self.font_small,
-                                   value=settings.music_volume)
-        self.slider_sfx   = Slider(cx - 150, 320, 300, "Sound Effects", self.font_small,
-                                   value=settings.sfx_volume)
-        self.btn_music_toggle = Button(cx, 372, 280, 46, self._music_label(), self.font_small)
-        self.btn_display  = Button(cx, 424, 280, 46, self._display_label(), self.font_small)
-        self.btn_tos   = Button(cx - 100, 476, 188, 44, "TERMS OF SERVICE",
+        # SETTINGS screen, laid out in two columns: Audio (left) and Game (right).
+        left_cx  = cx - 230
+        right_cx = cx + 230
+
+        self.slider_master = Slider(left_cx - 150, 156, 300, "Master Volume",
+                                    self.font_small, value=settings.master_volume)
+        self.slider_music = Slider(left_cx - 150, 218, 300, "Music Volume",
+                                   self.font_small, value=settings.music_volume)
+        self.slider_sfx   = Slider(left_cx - 150, 280, 300, "Sound Effects",
+                                   self.font_small, value=settings.sfx_volume)
+        self.btn_music_toggle = Button(left_cx, 330, 280, 44, self._music_label(),
+                                       self.font_small)
+
+        self.btn_lives   = Button(right_cx, 156, 280, 46, self._lives_label(),
+                                  self.font_small)
+        self.btn_display = Button(right_cx, 216, 280, 46, self._display_label(),
+                                  self.font_small)
+        self.btn_reset   = Button(right_cx, 276, 280, 46, "RESET PROGRESS",
+                                  self.font_small, base_color=(120, 50, 50),
+                                  hover_color=(170, 70, 70))
+
+        self.btn_tos   = Button(cx - 100, 474, 188, 44, "TERMS OF SERVICE",
                                 self.font_small,
                                 base_color=(50, 50, 80), hover_color=(80, 80, 130))
-        self.btn_legal = Button(cx + 100, 476, 188, 44, "LEGAL", self.font_small,
+        self.btn_legal = Button(cx + 100, 474, 188, 44, "LEGAL", self.font_small,
                                 base_color=(50, 50, 80), hover_color=(80, 80, 130))
-        self.btn_back = Button(cx, 532, 200, 50, "BACK", self.font_menu)
+        self.btn_back = Button(cx, 534, 200, 50, "BACK", self.font_menu)
+
+        # Reset-progress confirmation dialog.
+        self.reset_confirm = False
+        self.btn_reset_yes = Button(cx - 115, 360, 190, 54, "YES, RESET",
+                                    self.font_menu, base_color=(120, 40, 40),
+                                    hover_color=(170, 60, 60))
+        self.btn_reset_no = Button(cx + 115, 360, 190, 54, "CANCEL",
+                                   self.font_menu, base_color=(30, 120, 60),
+                                   hover_color=(50, 170, 90))
 
         # Shared BACK button for the TOS / Legal reading screens.
         self.btn_doc_back = Button(cx, 552, 200, 44, "BACK", self.font_menu)
@@ -165,6 +190,10 @@ class Game:
     def _display_label(self):
         return f"Screen: {self.display_modes[settings.display_mode][0]}"
 
+    def _lives_label(self):
+        n = settings.starting_lives
+        return f"Lives: {'Infinite' if n < 0 else n}"
+
     def apply_selected_character(self):
         """Recolor the player sprites and set the jump sound for the equipped
         character + skin stored in self.progress."""
@@ -181,10 +210,22 @@ class Game:
         self.progress['wallet'] = self.wallet
         save_progress(self.progress)
 
+    def _save_all(self):
+        """Persist coins (wallet) and high score together. Called at safe
+        points (pausing, level transitions) so progress is never lost."""
+        if self.score > self.high_score:
+            self.high_score = self.score
+        try:
+            save_high_score(self.high_score)
+        except Exception:
+            pass
+        self.persist_progress()
+
     def start_new_game(self):
         self.score     = 0
         self.coins     = 0
-        self.lives     = 3
+        self.infinite_lives = settings.starting_lives < 0
+        self.lives     = 99 if self.infinite_lives else settings.starting_lives
         self.level_num = 1
         self.prev_high = self.high_score
         self.new_record = False
@@ -227,7 +268,14 @@ class Game:
         self.player_group = pygame.sprite.GroupSingle(self.player)
 
     def reset_current_level(self):
+        # On a boss level, keep the damage already dealt to the boss so dying
+        # doesn't fully heal it - the player resumes the fight where they left.
+        preserved_hp = None
+        if self.is_boss and self.boss is not None and not self.boss.is_dead:
+            preserved_hp = self.boss.hp
         self.load_level(self.level_num)
+        if preserved_hp is not None and self.boss is not None:
+            self.boss.hp = preserved_hp
         start_music(self.theme_index())
 
     def theme_index(self):
@@ -400,6 +448,7 @@ class Game:
         self.firework_cd = 0
         self.cleared_boss = boss
         self.score += max(0, self.timer) * 10
+        self._save_all()
 
     def _handle_boss_combat(self):
         boss = self.boss
@@ -423,20 +472,30 @@ class Game:
             fb.kill()
 
         if self.player.rect.colliderect(boss.rect):
-            stomped = (self.player.vy > 0
-                       and self.player.rect.bottom < boss.rect.centery + 6)
-            if stomped:
-                self.player.vy = -9.5
-                defeated = boss.stomp()
-                self.score += 300
-                self.particle_group.add(
-                    Particle.create_score(boss.rect.centerx, boss.rect.top, "300", self.font_hud)
-                )
-                if defeated:
-                    self.particle_group.add(*Particle.create_firework(
-                        boss.rect.centerx, boss.rect.centery))
+            # If the boss was just hit (invincible), contact does nothing - no
+            # stomp and no damage. This prevents the player from taking damage
+            # in the frames right after a successful stomp while still
+            # overlapping the boss (the "jump over its back" bug).
+            if boss.invincible > 0:
+                pass
             else:
-                self.player.take_damage()
+                stomped = (self.player.vy > 0
+                           and self.player.rect.bottom < boss.rect.centery + 6)
+                if stomped:
+                    self.player.vy = -9.5
+                    # Brief grace so the upward bounce can't be punished.
+                    self.player.invincible_timer = max(
+                        self.player.invincible_timer, 40)
+                    defeated = boss.stomp()
+                    self.score += 300
+                    self.particle_group.add(
+                        Particle.create_score(boss.rect.centerx, boss.rect.top, "300", self.font_hud)
+                    )
+                    if defeated:
+                        self.particle_group.add(*Particle.create_firework(
+                            boss.rect.centerx, boss.rect.centery))
+                else:
+                    self.player.take_damage()
 
     def _on_game_over(self):
         stop_music()
@@ -484,11 +543,14 @@ class Game:
         if self.player.is_dead:
             self.player.death_timer -= 1
             if self.player.death_timer <= 0:
-                self.lives -= 1
-                if self.lives <= 0:
-                    self._on_game_over()
-                else:
+                if self.infinite_lives:
                     self.reset_current_level()
+                else:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self._on_game_over()
+                    else:
+                        self.reset_current_level()
 
     def update_clear(self):
         self.particle_group.update()
@@ -612,7 +674,7 @@ class Game:
         self.screen.blit(val, (vx, y + 27))
 
     def _draw_lives_card(self, y, h):
-        value = f"x {self.lives}"
+        value = "x INF" if self.infinite_lives else f"x {self.lives}"
         val_w = self.font_hud.size(value)[0]
         w = val_w + 24 + 22  # heart + spacing + value
         x = SCREEN_WIDTH - w - 18
@@ -758,27 +820,60 @@ class Game:
         else:
             self._draw_world()
         self._dim(170)
-        self._draw_title_banner("SETTINGS", 60, color=(255, 220, 0))
+        self._draw_title_banner("SETTINGS", 22, color=(255, 220, 0), big=False)
 
-        # Controls guide (moved here from the main menu).
-        heading = self.font_menu.render("CONTROLS", True, (255, 255, 255))
-        self.screen.blit(heading, (SCREEN_WIDTH // 2 - heading.get_width() // 2, 130))
-        guide = [
-            "Move:  Left / Right Arrows  or  A / D",
-            "Jump:  Space / Up / W      Duck:  Down / S",
-            "Pause:  Esc        Fullscreen:  F11",
-        ]
-        for i, line in enumerate(guide):
-            txt = self.font_small.render(line, True, (225, 230, 245))
-            self.screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 168 + i * 24))
+        cx = SCREEN_WIDTH // 2
+        left_cx, right_cx = cx - 230, cx + 230
 
+        ah = self.font_menu.render("AUDIO", True, (255, 230, 120))
+        self.screen.blit(ah, (left_cx - ah.get_width() // 2, 84))
+        gh = self.font_menu.render("GAME", True, (255, 230, 120))
+        self.screen.blit(gh, (right_cx - gh.get_width() // 2, 84))
+
+        self.slider_master.draw(self.screen)
         self.slider_music.draw(self.screen)
         self.slider_sfx.draw(self.screen)
+
         mp = self._logical_mouse()
         self.btn_music_toggle.label = self._music_label()
         self.btn_display.label = self._display_label()
-        for b in (self.btn_music_toggle, self.btn_display,
-                  self.btn_tos, self.btn_legal, self.btn_back):
+        self.btn_lives.label = self._lives_label()
+        for b in (self.btn_music_toggle, self.btn_lives, self.btn_display,
+                  self.btn_reset, self.btn_tos, self.btn_legal, self.btn_back):
+            b.update(mp)
+            b.draw(self.screen)
+
+        # Compact controls reminder near the bottom.
+        guide = ("Move: Arrows / A D    Jump: Space / W / Up    "
+                 "Duck: Down / S    Pause: Esc    Fullscreen: F11")
+        txt = self.font_small.render(guide, True, (210, 218, 235))
+        if txt.get_width() > SCREEN_WIDTH - 60:
+            txt = pygame.transform.smoothscale(
+                txt, (SCREEN_WIDTH - 60, txt.get_height()))
+        self.screen.blit(txt, (cx - txt.get_width() // 2, 428))
+
+        if self.reset_confirm:
+            self._draw_reset_confirm()
+
+    def _draw_reset_confirm(self):
+        self._dim(170)
+        bw, bh = 580, 300
+        box = pygame.Rect(SCREEN_WIDTH // 2 - bw // 2,
+                          SCREEN_HEIGHT // 2 - bh // 2, bw, bh)
+        pygame.draw.rect(self.screen, (40, 18, 22), box, border_radius=16)
+        pygame.draw.rect(self.screen, (200, 90, 90), box, width=3, border_radius=16)
+        self._draw_title_banner("RESET PROGRESS?", box.y + 24,
+                                color=(255, 120, 120), big=False)
+        lines = [
+            "This erases your coins, owned characters",
+            "and skins, and your high score.",
+            "This cannot be undone.",
+        ]
+        for i, ln in enumerate(lines):
+            t = self.font_small.render(ln, True, (235, 220, 220))
+            self.screen.blit(t, (box.centerx - t.get_width() // 2, box.y + 92 + i * 26))
+        mp = self._logical_mouse()
+        for b in (self.btn_reset_yes, self.btn_reset_no):
             b.update(mp)
             b.draw(self.screen)
 
@@ -926,6 +1021,7 @@ class Game:
         elif self.btn_menu_settings.is_clicked(event):
             sfx_menu_select()
             self.settings_return = MENU
+            self.slider_master.value = settings.master_volume
             self.slider_music.value = settings.music_volume
             self.slider_sfx.value   = settings.sfx_volume
             self.state = SETTINGS
@@ -945,6 +1041,7 @@ class Game:
             elif event.key == pygame.K_ESCAPE:
                 self.state = PAUSED
                 sfx_pause()
+                self._save_all()
 
     def _events_paused(self, event):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -957,6 +1054,7 @@ class Game:
         elif self.btn_settings.is_clicked(event):
             sfx_menu_select()
             self.settings_return = PAUSED
+            self.slider_master.value = settings.master_volume
             self.slider_music.value = settings.music_volume
             self.slider_sfx.value   = settings.sfx_volume
             self.state = SETTINGS
@@ -966,9 +1064,17 @@ class Game:
             start_music(0)
 
     def _events_settings(self, event):
+        if self.reset_confirm:
+            self._events_reset_confirm(event)
+            return
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            settings.save()
             self.state = self.settings_return
             return
+        if self.slider_master.handle_event(event):
+            settings.master_volume = self.slider_master.value
+            settings.clamp()
+            update_music_volume()
         if self.slider_music.handle_event(event):
             settings.music_volume = self.slider_music.value
             settings.clamp()
@@ -976,6 +1082,9 @@ class Game:
         if self.slider_sfx.handle_event(event):
             settings.sfx_volume = self.slider_sfx.value
             settings.clamp()
+        if event.type == pygame.MOUSEBUTTONUP:
+            # Persist after a slider drag finishes.
+            settings.save()
         if self.btn_music_toggle.is_clicked(event):
             settings.music_enabled = not settings.music_enabled
             sfx_menu_select()
@@ -983,9 +1092,18 @@ class Game:
                 start_music(self.theme_index())
             else:
                 stop_music()
+            settings.save()
+        elif self.btn_lives.is_clicked(event):
+            sfx_menu_select()
+            self._cycle_starting_lives()
+            settings.save()
         elif self.btn_display.is_clicked(event):
             sfx_menu_select()
             self._cycle_display_mode()
+            settings.save()
+        elif self.btn_reset.is_clicked(event):
+            sfx_menu_select()
+            self.reset_confirm = True
         elif self.btn_tos.is_clicked(event):
             sfx_menu_select()
             self.tos_scroll = 0.0
@@ -996,7 +1114,39 @@ class Game:
             self.state = LEGAL
         elif self.btn_back.is_clicked(event):
             sfx_menu_select()
+            settings.save()
             self.state = self.settings_return
+
+    def _cycle_starting_lives(self):
+        order = [3, 5, -1]
+        try:
+            i = order.index(settings.starting_lives)
+        except ValueError:
+            i = 0
+        settings.starting_lives = order[(i + 1) % len(order)]
+
+    def _events_reset_confirm(self, event):
+        if event.type == pygame.KEYDOWN and event.key in (
+                pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            sfx_menu_select()
+            self.reset_confirm = False
+            return
+        if self.btn_reset_no.is_clicked(event):
+            sfx_menu_select()
+            self.reset_confirm = False
+        elif self.btn_reset_yes.is_clicked(event):
+            sfx_menu_select()
+            self._reset_progress()
+            self.reset_confirm = False
+
+    def _reset_progress(self):
+        self.progress = default_progress()
+        self.wallet = 0
+        self.high_score = 0
+        self.prev_high = 0
+        save_high_score(0)
+        save_progress(self.progress)
+        self.apply_selected_character()
 
     def _events_shop(self, event):
         if self.shop.handle_event(event):
@@ -1118,6 +1268,10 @@ class Game:
             pass
         try:
             self.persist_progress()
+        except Exception:
+            pass
+        try:
+            settings.save()
         except Exception:
             pass
         pygame.quit()

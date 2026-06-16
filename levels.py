@@ -286,8 +286,8 @@ def build_boss_level(level_num, sprites):
         coin_group.add(Coin(col * TILE_SIZE + TILE_SIZE // 2, 8 * TILE_SIZE + TILE_SIZE // 2,
                             sprites))
 
-    hp    = 4 + (boss_round - 1)
-    speed = 1.6 + 0.25 * (boss_round - 1)
+    hp    = 3 + (boss_round - 1)
+    speed = 1.4 + 0.2 * (boss_round - 1)
     boss = Boss(560, 13 * TILE_SIZE, sprites, hp=hp, speed=speed)
     boss.set_bounds(TILE_SIZE + 20, 19 * TILE_SIZE - 20)
     data.boss = boss

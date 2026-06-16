@@ -11,7 +11,7 @@ def play_synth_sound(freq_list, duration, wav_type='square', volume=0.08, sample
         if not pygame.mixer or not pygame.mixer.get_init():
             return None
 
-        vol = volume * settings.sfx_volume
+        vol = volume * settings.effective_sfx()
         if vol <= 0.0:
             return None
 
@@ -192,7 +192,7 @@ def start_music(theme_index=0):
         if _music_channel is None:
             _music_channel = pygame.mixer.Channel(0)
         _music_channel.stop()
-        _music_channel.set_volume(settings.music_volume)
+        _music_channel.set_volume(settings.effective_music())
         _music_channel.play(snd, loops=-1)
     except Exception:
         pass
@@ -210,6 +210,6 @@ def stop_music():
 def update_music_volume():
     try:
         if _music_channel is not None:
-            _music_channel.set_volume(settings.music_volume if settings.music_enabled else 0.0)
+            _music_channel.set_volume(settings.effective_music() if settings.music_enabled else 0.0)
     except Exception:
         pass

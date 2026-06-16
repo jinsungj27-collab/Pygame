@@ -25,6 +25,11 @@ def _default_progress():
     }
 
 
+def default_progress():
+    """A fresh progress dict (used when resetting all progress)."""
+    return _default_progress()
+
+
 def load_progress():
     data = _default_progress()
     try:
