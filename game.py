@@ -62,7 +62,7 @@ class Game:
         self._dst = pygame.Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
         self._scale = 1.0
         self._apply_display_mode()
-        pygame.display.set_caption("Super Jin  v2.3.1")
+        pygame.display.set_caption("Super Jin  v2.3.7")
         self.clock = pygame.time.Clock()
 
         self.font_hud   = pygame.font.Font(None, 24); self.font_hud.set_bold(True)
@@ -224,6 +224,9 @@ class Game:
     def start_new_game(self):
         self.score     = 0
         self.coins     = 0
+        # Fresh random layout seed so obstacles differ every playthrough
+        # (but stay stable across retries within this run).
+        self.run_seed  = random.randrange(1, 1 << 30)
         self.infinite_lives = settings.starting_lives < 0
         self.lives     = 99 if self.infinite_lives else settings.starting_lives
         self.level_num = 1
@@ -233,11 +236,12 @@ class Game:
         self._enter_intro()
 
     def load_level(self, level_num):
+        seed = getattr(self, 'run_seed', 0)
         self.is_boss = is_boss_level(level_num)
         if self.is_boss:
-            self.level = build_boss_level(level_num, self.sprites)
+            self.level = build_boss_level(level_num, self.sprites, seed=seed)
         else:
-            self.level = build_level(level_num, self.sprites)
+            self.level = build_level(level_num, self.sprites, seed=seed)
         self.theme = THEMES[self.level.theme_index]
 
         self.camera_x = 0
@@ -290,6 +294,7 @@ class Game:
     def _enter_intro(self):
         self.state = INTRO
         self.intro_timer = int(FPS * 2.4)
+        self.intro_timer_max = self.intro_timer
         sfx_level_start()
 
     def handle_collisions(self):
@@ -340,7 +345,8 @@ class Game:
             self.score += 200
             sfx_coin()
             self.particle_group.add(
-                Particle.create_score(coin.rect.x, coin.rect.y - 10, "200", self.font_hud)
+                Particle.create_score(coin.rect.x - self.camera_x, coin.rect.y - 10,
+                                      "200", self.font_hud)
             )
 
         for item in pygame.sprite.spritecollide(self.player, self.item_group, False):
@@ -349,7 +355,8 @@ class Game:
                 self.player.is_big = True
                 self.score += 1000
                 self.particle_group.add(
-                    Particle.create_score(item.rect.x, item.rect.y, "1000", self.font_hud)
+                    Particle.create_score(item.rect.x - self.camera_x, item.rect.y,
+                                          "1000", self.font_hud)
                 )
                 item.kill()
 
@@ -365,7 +372,8 @@ class Game:
                 enemy.squish()
                 self.score += 200
                 self.particle_group.add(
-                    Particle.create_score(enemy.rect.x, enemy.rect.y, "200", self.font_hud)
+                    Particle.create_score(enemy.rect.x - self.camera_x, enemy.rect.y,
+                                          "200", self.font_hud)
                 )
             else:
                 if enemy.in_shell and enemy.vx == 0:
@@ -386,7 +394,8 @@ class Game:
                 hit.vx      = 2.0 if enemy.vx > 0 else -2.0
                 self.score += 500
                 self.particle_group.add(
-                    Particle.create_score(hit.rect.x, hit.rect.y, "500", self.font_hud)
+                    Particle.create_score(hit.rect.x - self.camera_x, hit.rect.y,
+                                          "500", self.font_hud)
                 )
 
     def _trigger_block_hit(self, tile):
@@ -399,7 +408,8 @@ class Game:
                 self.score += 200
                 self.item_group.add(Item(tile.rect.x, tile.rect.y, 'coin', self.sprites))
                 self.particle_group.add(
-                    Particle.create_score(tile.rect.x, tile.rect.y - 20, "200", self.font_hud)
+                    Particle.create_score(tile.rect.x - self.camera_x, tile.rect.y - 20,
+                                          "200", self.font_hud)
                 )
             elif tile.contains_item == 'mushroom':
                 sfx_powerup_spawn()
@@ -458,7 +468,8 @@ class Game:
                 self.stage_clear = True
                 self.score += 5000
                 self.particle_group.add(
-                    Particle.create_score(boss.rect.centerx, boss.rect.top, "5000", self.font_hud)
+                    Particle.create_score(boss.rect.centerx - self.camera_x, boss.rect.top,
+                                          "5000", self.font_hud)
                 )
                 self._enter_clear(boss=True)
             return
@@ -489,7 +500,8 @@ class Game:
                     defeated = boss.stomp()
                     self.score += 300
                     self.particle_group.add(
-                        Particle.create_score(boss.rect.centerx, boss.rect.top, "300", self.font_hud)
+                        Particle.create_score(boss.rect.centerx - self.camera_x, boss.rect.top,
+                                              "300", self.font_hud)
                     )
                     if defeated:
                         self.particle_group.add(*Particle.create_firework(
@@ -590,30 +602,103 @@ class Game:
                 pygame.draw.circle(glow, (*sun_color, alpha), (rad, rad), rad)
                 self.screen.blit(glow, (SCREEN_WIDTH - 120 - rad, 110 - rad))
 
-        mcam = cam * 0.2
-        mcolor = th['mountain']
-        for mx in range(-200, self.level_width + 400, 420):
-            hx = mx - mcam
-            pygame.draw.polygon(self.screen, mcolor,
-                                [(hx, 470), (hx + 210, 250), (hx + 420, 470)])
-            peak = (min(mcolor[0] + 40, 255), min(mcolor[1] + 40, 255), min(mcolor[2] + 40, 255))
-            pygame.draw.polygon(self.screen, peak,
-                                [(hx + 170, 290), (hx + 210, 250), (hx + 250, 290),
-                                 (hx + 230, 305), (hx + 190, 305)])
+        if th.get('city'):
+            self._draw_city_skyline(cam)
+        else:
+            mcam = cam * 0.2
+            mcolor = th['mountain']
+            for mx in range(-200, self.level_width + 400, 420):
+                hx = mx - mcam
+                pygame.draw.polygon(self.screen, mcolor,
+                                    [(hx, 470), (hx + 210, 250), (hx + 420, 470)])
+                peak = (min(mcolor[0] + 40, 255), min(mcolor[1] + 40, 255), min(mcolor[2] + 40, 255))
+                pygame.draw.polygon(self.screen, peak,
+                                    [(hx + 170, 290), (hx + 210, 250), (hx + 250, 290),
+                                     (hx + 230, 305), (hx + 190, 305)])
 
-        hcam = cam * 0.3
-        for hill_x in range(-100, self.level_width + 200, 600):
-            hx = hill_x - hcam
-            pygame.draw.polygon(self.screen, th['hill_shadow'],
-                                [(hx, 520), (hx + 150, 320), (hx + 300, 520)])
-            pygame.draw.polygon(self.screen, th['hill'],
-                                [(hx + 30, 520), (hx + 160, 340), (hx + 290, 520)])
+            hcam = cam * 0.3
+            for hill_x in range(-100, self.level_width + 200, 600):
+                hx = hill_x - hcam
+                pygame.draw.polygon(self.screen, th['hill_shadow'],
+                                    [(hx, 520), (hx + 150, 320), (hx + 300, 520)])
+                pygame.draw.polygon(self.screen, th['hill'],
+                                    [(hx + 30, 520), (hx + 160, 340), (hx + 290, 520)])
 
         drift = ticks * 0.012
         for i, (cxp, cyp, scl) in enumerate(self.clouds):
             cxw = (cxp + drift) % (self.level_width + 400)
             cx = cxw - cam * 0.1
             self._draw_cloud(cx, cyp, scl, th['cloud'])
+
+    def _draw_city_skyline(self, cam):
+        """Parallax city skyline with randomized building heights/widths and
+        lit windows, used by the City theme."""
+        base_y = 520  # building bottoms sit on the ground horizon
+        lit = (255, 224, 140)
+        # (parallax factor, spacing, body color, min height, max height, salt)
+        layers = [
+            (0.18, 170, (66, 78, 120), 140, 270, 1234),
+            (0.32, 130, (44, 54, 92), 90, 230, 8765),
+        ]
+        for pfac, step, body, hmin, hmax, salt in layers:
+            bcam = cam * pfac
+            for i, bx in enumerate(range(-step, self.level_width + step, step)):
+                x = int(bx - bcam)
+                if x < -step or x > SCREEN_WIDTH:
+                    continue
+                hh = self._hash(i + salt)
+                hw = self._hash(i * 3 + salt + 7)
+                h = hmin + hh % (hmax - hmin)
+                w = step - 22 - hw % 26
+                top = base_y - h
+                pygame.draw.rect(self.screen, body, (x, top, w, h))
+                hl = (min(body[0] + 25, 255), min(body[1] + 25, 255), min(body[2] + 25, 255))
+                pygame.draw.rect(self.screen, hl, (x, top, w, 5))
+                # Occasional rooftop antenna for taller buildings.
+                if h > hmax - 50 and (hh >> 9) % 2 == 0:
+                    pygame.draw.rect(self.screen, hl, (x + w // 2 - 1, top - 14, 2, 14))
+                cols = max(1, (w - 12) // 18)
+                rows = max(1, (h - 16) // 22)
+                for r in range(rows):
+                    for c in range(cols):
+                        if (self._hash(i * 131 + r * 17 + c * 7 + salt)) % 3 != 0:
+                            continue
+                        pygame.draw.rect(self.screen, lit,
+                                         (x + 8 + c * 18, top + 12 + r * 22, 8, 11))
+
+    @staticmethod
+    def _hash(n):
+        """Small integer hash for stable, well-spread pseudo-random values."""
+        n = (n ^ 61) ^ ((n >> 16) & 0xffffffff)
+        n = (n + (n << 3)) & 0xffffffff
+        n ^= (n >> 4)
+        n = (n * 0x27d4eb2d) & 0xffffffff
+        n ^= (n >> 15)
+        return n & 0xffffffff
+
+    def _draw_city_grass(self):
+        """Draw a grassy strip with blades along the top of the city ground."""
+        top_y = 13 * TILE_SIZE  # top row of the ground
+        dark  = (38, 140, 58)
+        green = (74, 196, 92)
+        blade = (96, 220, 110)
+        for tile in self.tile_group:
+            if tile.tile_type != 'ground' or tile.rect.y != top_y:
+                continue
+            sx = tile.rect.x - self.camera_x
+            if sx < -TILE_SIZE or sx > SCREEN_WIDTH:
+                continue
+            # Grass band sitting on top of the ground block.
+            pygame.draw.rect(self.screen, dark,  (sx, top_y - 6, TILE_SIZE, 8))
+            pygame.draw.rect(self.screen, green, (sx, top_y - 6, TILE_SIZE, 4))
+            # A few blades poking up, positioned deterministically per column.
+            col = tile.rect.x // TILE_SIZE
+            for b in range(4):
+                bh = 5 + self._hash(col * 9 + b) % 5
+                bx = sx + 4 + b * (TILE_SIZE // 4) + self._hash(col + b) % 4
+                pygame.draw.polygon(self.screen, blade,
+                                    [(bx, top_y - 6), (bx + 3, top_y - 6),
+                                     (bx + 1, top_y - 6 - bh)])
 
     def _draw_cloud(self, x, y, scale, color):
         w = int(110 * scale)
@@ -723,6 +808,8 @@ class Game:
         if not self.is_boss:
             self._draw_flagpole_and_castle()
         for tile     in self.tile_group:     tile.draw(self.screen, self.camera_x)
+        if self.theme.get('city'):
+            self._draw_city_grass()
         for hazard   in self.hazard_group:   hazard.draw(self.screen, self.camera_x)
         for coin     in self.coin_group:     coin.draw(self.screen, self.camera_x)
         for item     in self.item_group:     item.draw(self.screen, self.camera_x)
@@ -782,28 +869,66 @@ class Game:
             b.update(mp)
             b.draw(self.screen)
 
-        tip = self.font_small.render("v2.3.1  -  Enhanced Edition", True, (220, 220, 230))
+        tip = self.font_small.render("v2.3.7  -  Enhanced Edition", True, (220, 220, 230))
         self.screen.blit(tip, (SCREEN_WIDTH // 2 - tip.get_width() // 2, 560))
+
+    def _draw_card(self, cx, cy, w, h, accent, fill=(18, 21, 36), alpha=215):
+        """Draw a modern rounded translucent panel with an accent border."""
+        rect = pygame.Rect(0, 0, w, h)
+        rect.center = (cx, cy)
+        panel = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(panel, (*fill, alpha), (0, 0, w, h), border_radius=16)
+        self.screen.blit(panel, rect.topleft)
+        pygame.draw.rect(self.screen, accent, rect, width=3, border_radius=16)
+        pygame.draw.rect(self.screen, accent, (rect.x + 14, rect.y + 12, w - 28, 5),
+                         border_radius=3)
+        return rect
+
+    def _boss_name(self):
+        return "MEGA MECH" if self.is_boss and self.theme.get('city') else "THE BEAST"
 
     def draw_intro(self):
         self._draw_background(self.camera_x)
-        self._dim(140)
+        self._dim(150)
+        cx = SCREEN_WIDTH // 2
+        cy = SCREEN_HEIGHT // 2 - 10
         if self.is_boss:
-            self._draw_title_banner("BOSS BATTLE", 190, color=(255, 70, 70))
-            warn = self.font_menu.render("Stomp the boss to win!", True, (255, 220, 120))
-            self.screen.blit(warn, (SCREEN_WIDTH // 2 - warn.get_width() // 2, 300))
+            accent = (255, 80, 80)
+            rect = self._draw_card(cx, cy, 560, 300, accent)
+            self._draw_title_banner("BOSS BATTLE", rect.y + 40, color=accent)
+            nm = self.font_title.render(self._boss_name(), True, (255, 220, 130))
+            self.screen.blit(nm, (cx - nm.get_width() // 2, rect.y + 128))
+            tip = self.font_menu.render("Stomp it to win!", True, (235, 235, 245))
+            self.screen.blit(tip, (cx - tip.get_width() // 2, rect.y + 182))
         else:
-            self._draw_title_banner(f"WORLD {self.level.world_name}", 200)
-            sub = self.font_menu.render(self.theme['name'], True, (200, 220, 255))
-            self.screen.blit(sub, (SCREEN_WIDTH // 2 - sub.get_width() // 2, 290))
+            accent = tuple(self.theme.get('sun', (255, 220, 0)))[:3]
+            rect = self._draw_card(cx, cy, 560, 300, accent)
+            self._draw_title_banner(f"WORLD {self.level.world_name}", rect.y + 36,
+                                    color=(255, 255, 255))
+            sub = self.font_menu.render(self.theme['name'], True, (185, 212, 255))
+            self.screen.blit(sub, (cx - sub.get_width() // 2, rect.y + 118))
+            lvl = self.font_menu.render(f"Level {self.level_num}", True, (255, 255, 255))
+            self.screen.blit(lvl, (cx - lvl.get_width() // 2, rect.y + 162))
+            icon = pygame.transform.scale(self.sprites.player_small['idle'], (26, 32))
+            lives_txt = self.font_menu.render(f"x  {self.lives}", True, (255, 255, 255))
+            total_w = icon.get_width() + 8 + lives_txt.get_width()
+            ix = cx - total_w // 2
+            self.screen.blit(icon, (ix, rect.y + 206))
+            self.screen.blit(lives_txt, (ix + icon.get_width() + 8, rect.y + 208))
 
-        lvl = self.font_menu.render(f"Level {self.level_num}", True, (255, 255, 255))
-        self.screen.blit(lvl, (SCREEN_WIDTH // 2 - lvl.get_width() // 2, 340))
+        self._draw_intro_progress(rect, accent)
 
-        icon = pygame.transform.scale(self.sprites.player_small['idle'], (28, 34))
-        self.screen.blit(icon, (SCREEN_WIDTH // 2 - 40, 400))
-        lv = self.font_menu.render(f"x  {self.lives}", True, (255, 255, 255))
-        self.screen.blit(lv, (SCREEN_WIDTH // 2 + 0, 405))
+    def _draw_intro_progress(self, rect, accent):
+        frac = 1.0
+        if getattr(self, 'intro_timer_max', 0) > 0:
+            frac = 1.0 - max(0, self.intro_timer) / self.intro_timer_max
+        bw = rect.width - 80
+        bx = rect.centerx - bw // 2
+        by = rect.bottom - 30
+        hint = self.font_small.render("Get ready...", True, (210, 215, 230))
+        self.screen.blit(hint, (rect.centerx - hint.get_width() // 2, by - 24))
+        pygame.draw.rect(self.screen, (48, 54, 74), (bx, by, bw, 8), border_radius=4)
+        pygame.draw.rect(self.screen, accent, (bx, by, int(bw * frac), 8), border_radius=4)
 
     def draw_pause(self):
         self._draw_world()
@@ -943,17 +1068,21 @@ class Game:
 
     def draw_clear(self):
         self._draw_world()
-        self._dim(70)
+        self._dim(90)
+        cx = SCREEN_WIDTH // 2
+        cy = SCREEN_HEIGHT // 2 - 20
         if self.cleared_boss:
-            self._draw_title_banner("BOSS DEFEATED!", 120, color=(255, 120, 120))
+            accent, title = (255, 120, 120), "BOSS DEFEATED!"
         else:
-            self._draw_title_banner("STAGE CLEAR!", 120, color=(255, 230, 60))
-        sub = self.font_menu.render(
+            accent, title = (255, 226, 72), "STAGE CLEAR!"
+        rect = self._draw_card(cx, cy, 540, 220, accent)
+        self._draw_title_banner(title, rect.y + 34, color=accent)
+        bonus = self.font_menu.render(
             f"+{max(0, self.timer) * 10} time bonus", True, (255, 255, 255))
-        self.screen.blit(sub, (SCREEN_WIDTH // 2 - sub.get_width() // 2, 210))
+        self.screen.blit(bonus, (cx - bonus.get_width() // 2, rect.y + 116))
         nxt = self.font_small.render(
-            "Next level starting...   (Enter to skip)", True, (230, 230, 240))
-        self.screen.blit(nxt, (SCREEN_WIDTH // 2 - nxt.get_width() // 2, 260))
+            "Next level starting...   (Enter to skip)", True, (225, 230, 245))
+        self.screen.blit(nxt, (cx - nxt.get_width() // 2, rect.y + 162))
 
     def draw_gameover(self):
         self._draw_background(self.camera_x)

@@ -40,11 +40,12 @@ class Enemy(pygame.sprite.Sprite):
             self.rect.height = 30
             return
 
-        self.image = (
-            self.sprites.goomba['walk1']
-            if self.enemy_type == 'goomba'
-            else self.sprites.koopa['walk1']
-        )
+        if self.enemy_type == 'goomba':
+            self.image = self.sprites.goomba['walk1']
+        elif self.enemy_type == 'robot':
+            self.image = self.sprites.robot['walk1']
+        else:
+            self.image = self.sprites.koopa['walk1']
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
@@ -57,7 +58,7 @@ class Enemy(pygame.sprite.Sprite):
             self._update_bird()
             return
 
-        if self.is_dead and self.enemy_type == 'goomba':
+        if self.is_dead and self.enemy_type in ('goomba', 'robot'):
             self.dead_timer -= 1
             if self.dead_timer <= 0:
                 self.kill()
@@ -158,6 +159,16 @@ class Enemy(pygame.sprite.Sprite):
                     if frame == 0
                     else self.sprites.goomba['walk2']
                 )
+        elif self.enemy_type == 'robot':
+            if self.is_dead:
+                self.image = self.sprites.robot['squished']
+            else:
+                base = (
+                    self.sprites.robot['walk1']
+                    if frame == 0
+                    else self.sprites.robot['walk2']
+                )
+                self.image = pygame.transform.flip(base, self.vx > 0, False)
         elif self.enemy_type == 'koopa':
             if self.in_shell:
                 self.image = self.sprites.koopa['shell']
@@ -183,6 +194,12 @@ class Enemy(pygame.sprite.Sprite):
             self.vy         = 0
             self.dead_timer = 30
             self.image      = self.sprites.goomba['squished']
+        elif self.enemy_type == 'robot':
+            self.is_dead    = True
+            self.vx         = 0
+            self.vy         = 0
+            self.dead_timer = 30
+            self.image      = self.sprites.robot['squished']
         elif self.enemy_type == 'koopa':
             if not self.in_shell:
                 self.in_shell    = True

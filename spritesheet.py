@@ -88,6 +88,100 @@ def _make_bird(frame):
     return s
 
 
+def _make_robot(frame):
+    """City-phase walking enemy: a small bipedal robot."""
+    W, H = 38, 42
+    s = pygame.Surface((W, H), pygame.SRCALPHA)
+    steel = (158, 168, 184); dsteel = (96, 106, 122); dark = (44, 50, 62)
+    eye = (90, 215, 255); red = (232, 72, 72)
+
+    # Antenna with a blinking light.
+    pygame.draw.line(s, dsteel, (W // 2, 1), (W // 2, 8), 2)
+    pygame.draw.circle(s, red, (W // 2, 2), 3)
+
+    # Arms.
+    pygame.draw.rect(s, dsteel, (2, 16, 5, 12), border_radius=2)
+    pygame.draw.rect(s, dsteel, (31, 16, 5, 12), border_radius=2)
+
+    # Head/body block.
+    pygame.draw.rect(s, dark,  (5, 8, 28, 24), border_radius=6)
+    pygame.draw.rect(s, steel, (7, 10, 24, 20), border_radius=5)
+    pygame.draw.rect(s, dsteel, (7, 10, 24, 6), border_radius=3)
+
+    # Visor eye.
+    pygame.draw.rect(s, dark, (10, 15, 18, 8), border_radius=3)
+    pygame.draw.rect(s, eye,  (12, 17, 14, 4))
+    # Chest light.
+    pygame.draw.circle(s, red, (W // 2, 27), 3)
+
+    # Legs (alternate for walking).
+    if frame == 0:
+        pygame.draw.rect(s, dark,   (9, 31, 8, 11), border_radius=2)
+        pygame.draw.rect(s, dsteel, (21, 31, 8, 8), border_radius=2)
+    else:
+        pygame.draw.rect(s, dsteel, (9, 31, 8, 8), border_radius=2)
+        pygame.draw.rect(s, dark,   (21, 31, 8, 11), border_radius=2)
+    return s
+
+
+def _make_robot_squished():
+    W, H = 38, 42
+    s = pygame.Surface((W, H), pygame.SRCALPHA)
+    steel = (158, 168, 184); dark = (44, 50, 62); spark = (255, 220, 90)
+    pygame.draw.rect(s, dark,  (4, 30, 30, 10), border_radius=4)
+    pygame.draw.rect(s, steel, (6, 32, 26, 6), border_radius=3)
+    # Sparks from the broken bot.
+    for sx in (10, 19, 28):
+        pygame.draw.line(s, spark, (sx, 30), (sx - 2, 25), 2)
+        pygame.draw.line(s, spark, (sx, 30), (sx + 3, 26), 2)
+    return s
+
+
+def _make_robot_boss(frame):
+    """City-phase boss: a hulking mech."""
+    W, H = 124, 116
+    s = pygame.Surface((W, H), pygame.SRCALPHA)
+    steel = (150, 162, 180); dsteel = (92, 102, 120); dark = (40, 46, 58)
+    eye = (255, 70, 60); glow = (255, 170, 60); bolt = (70, 78, 94)
+
+    # Shoulder cannons.
+    pygame.draw.rect(s, dark,   (6, 34, 22, 18), border_radius=4)
+    pygame.draw.rect(s, dsteel, (2, 38, 10, 10), border_radius=3)
+    pygame.draw.rect(s, dark,   (96, 34, 22, 18), border_radius=4)
+    pygame.draw.rect(s, dsteel, (112, 38, 10, 10), border_radius=3)
+
+    # Main torso.
+    pygame.draw.rect(s, dark,  (28, 30, 68, 56), border_radius=10)
+    pygame.draw.rect(s, steel, (32, 34, 60, 48), border_radius=8)
+    # Chest core (glowing reactor).
+    pygame.draw.circle(s, dark, (W // 2, 58), 14)
+    pygame.draw.circle(s, glow, (W // 2, 58), 10)
+    pygame.draw.circle(s, (255, 240, 200), (W // 2, 58), 4)
+    # Body bolts.
+    for bx, by in [(40, 40), (84, 40), (40, 78), (84, 78)]:
+        pygame.draw.circle(s, bolt, (bx, by), 3)
+
+    # Head.
+    pygame.draw.rect(s, dsteel, (48, 6, 28, 24), border_radius=6)
+    pygame.draw.rect(s, dark,   (52, 12, 20, 9), border_radius=3)
+    pygame.draw.rect(s, eye,    (55, 14, 14, 4))
+    # Antennae.
+    pygame.draw.line(s, dsteel, (54, 6), (48, -2), 2)
+    pygame.draw.line(s, dsteel, (70, 6), (76, -2), 2)
+
+    # Legs (alternate).
+    if frame == 0:
+        pygame.draw.rect(s, dark,   (36, 86, 22, 28), border_radius=5)
+        pygame.draw.rect(s, dsteel, (66, 86, 22, 22), border_radius=5)
+    else:
+        pygame.draw.rect(s, dsteel, (36, 86, 22, 22), border_radius=5)
+        pygame.draw.rect(s, dark,   (66, 86, 22, 28), border_radius=5)
+    # Feet.
+    pygame.draw.rect(s, bolt, (32, 110, 30, 6), border_radius=2)
+    pygame.draw.rect(s, bolt, (62, 110, 30, 6), border_radius=2)
+    return s
+
+
 class SpriteSheet:
     def __init__(self):
         self.apply_character(None)
@@ -124,6 +218,16 @@ class SpriteSheet:
         self.boss = {
             'walk1': _make_boss(0),
             'walk2': _make_boss(1),
+        }
+        self.boss_city = {
+            'walk1': _make_robot_boss(0),
+            'walk2': _make_robot_boss(1),
+        }
+
+        self.robot = {
+            'walk1':    _make_robot(0),
+            'walk2':    _make_robot(1),
+            'squished': _make_robot_squished(),
         }
 
         self.bird = {

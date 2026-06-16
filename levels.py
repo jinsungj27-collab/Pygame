@@ -32,7 +32,18 @@ THEMES = [
         'cloud': (110, 95, 120), 'mountain': (55, 45, 70),
         'sun': (200, 180, 210), 'night': True,
     },
+    {
+        'name': 'City',
+        'sky_top': (34, 40, 92), 'sky_bottom': (168, 122, 138),
+        'hill': (70, 80, 120), 'hill_shadow': (50, 58, 95),
+        'cloud': (188, 176, 198), 'mountain': (60, 70, 110),
+        'sun': (255, 198, 128), 'night': False,
+        'city': True,
+    },
 ]
+
+# Index of the City theme in THEMES (used for all levels after the first boss).
+CITY_THEME_INDEX = len(THEMES) - 1
 
 
 class LevelData:
@@ -73,14 +84,19 @@ def _add_coin(coins, col, row):
 
 
 def _place_feature(feat, col, end, layout, gap_cols, spike_cols,
-                   coins, enemy_spawns, bird_spawns, rng, diff):
+                   coins, enemy_spawns, bird_spawns, rng, diff, is_city=False):
     koopa_chance = min(0.20 + 0.06 * diff, 0.5)
+
+    def ground_enemy():
+        # In the city phase, the new Robot enemy patrols the streets.
+        if is_city and rng.random() < 0.7:
+            return 'robot'
+        return 'koopa' if rng.random() < koopa_chance else 'goomba'
 
     if feat == 'flat':
         length = rng.randint(4, 7)
         if rng.random() < 0.6:
-            etype = 'koopa' if rng.random() < koopa_chance else 'goomba'
-            enemy_spawns.append(((col + length // 2) * TILE_SIZE, etype))
+            enemy_spawns.append(((col + length // 2) * TILE_SIZE, ground_enemy()))
         return col + length + 1
 
     if feat == 'coin_line':
@@ -96,7 +112,8 @@ def _place_feature(feat, col, end, layout, gap_cols, spike_cols,
         _add_coin(coins, col, pr - 2)
         _add_coin(coins, col + 1, pr - 2)
         if rng.random() < 0.5:
-            enemy_spawns.append(((col + 3) * TILE_SIZE, 'goomba'))
+            enemy_spawns.append(((col + 3) * TILE_SIZE,
+                                 'robot' if is_city else 'goomba'))
         return col + 4
 
     if feat == 'gap':
@@ -134,20 +151,24 @@ def _place_feature(feat, col, end, layout, gap_cols, spike_cols,
         return col + n * 2 + 2
 
     if feat == 'spikes':
-        w = rng.choice([1, 2])
+        w = rng.choice([1, 1, 2, 2, 3]) if diff >= 2 else rng.choice([1, 2])
         for i in range(w):
             spike_cols.add(col + i)
-        return col + w + 3
+        return col + w + rng.randint(2, 4)
 
     return col + 4
 
 
-def build_level(level_num, sprites):
+def build_level(level_num, sprites, seed=0):
     import pygame
 
-    rng = random.Random(level_num * 7919 + 13)
+    rng = random.Random(seed * 1000003 + level_num * 7919 + 13)
     data = LevelData()
-    data.theme_index = (level_num - 1) % len(THEMES)
+    # First boss is level 4. After it (level 5+), the world becomes a City.
+    if level_num <= 4:
+        data.theme_index = (level_num - 1) % 4
+    else:
+        data.theme_index = CITY_THEME_INDEX
     data.world_name  = f"{((level_num - 1) // 4) + 1}-{((level_num - 1) % 4) + 1}"
 
     diff = level_num - 1
@@ -177,8 +198,18 @@ def build_level(level_num, sprites):
     enemy_spawns = []
     bird_spawns = []
 
-    for (c, r, k) in [(7, 9, 'Q'), (8, 9, 'M'), (9, 9, 'Q')]:
-        layout[(c, r)] = k
+    # Three SEPARATE ? blocks spread across the level (one per third), each at
+    # its own random column and height. One of them holds the mushroom.
+    span_start = SAFE_START + 4
+    span_end   = SAFE_END - 8
+    zone = max(6, (span_end - span_start) // 3)
+    block_slots = []
+    for z in range(3):
+        z0 = span_start + z * zone
+        bc = z0 + rng.randint(0, max(1, zone - 4))
+        br = rng.choice([8, 9, 10])
+        block_slots.append((bc, br))
+    mush_idx = rng.randint(0, 2)
 
     col = SAFE_START + 4
     end = SAFE_END - 6
@@ -190,7 +221,15 @@ def build_level(level_num, sprites):
             choices += ['gap', 'spikes', 'parkour']
         feat = rng.choice(choices)
         col = _place_feature(feat, col, end, layout, gap_cols, spike_cols,
-                             coins, enemy_spawns, bird_spawns, rng, diff)
+                             coins, enemy_spawns, bird_spawns, rng, diff,
+                             is_city=(level_num > 4))
+
+    # Place the power-up blocks after features so they sit on top, and never
+    # over a pit column.
+    for i, (bc, br) in enumerate(block_slots):
+        if bc in gap_cols:
+            bc += 1
+        layout[(bc, br)] = 'M' if i == mush_idx else 'Q'
 
     _create_staircase(flag_col - 7, 12, size=min(4 + diff, 6),
                       ascends_right=True, layout=layout)
@@ -225,9 +264,10 @@ def build_level(level_num, sprites):
         coin_group.add(Coin(cx, cy, sprites))
 
     for (sx, etype) in enemy_spawns:
-        sy = 480 if etype == 'goomba' else 440
+        sy = 440 if etype == 'koopa' else 480
         e = Enemy(sx, sy, etype, sprites)
-        e.vx = -1.2 * enemy_speed_mult
+        base_speed = 1.8 if etype == 'robot' else 1.2
+        e.vx = -base_speed * enemy_speed_mult
         e.shell_speed = 8.0 * enemy_speed_mult
         enemy_group.add(e)
 
@@ -250,12 +290,15 @@ def is_boss_level(level_num):
     return level_num % 4 == 0
 
 
-def build_boss_level(level_num, sprites):
+def build_boss_level(level_num, sprites, seed=0):
     import pygame
 
     data = LevelData()
     data.is_boss = True
-    data.theme_index = (level_num - 1) % len(THEMES)
+    if level_num <= 4:
+        data.theme_index = (level_num - 1) % 4
+    else:
+        data.theme_index = CITY_THEME_INDEX
     data.world_name = f"{((level_num - 1) // 4) + 1}-BOSS"
     data.level_width = SCREEN_WIDTH
     data.flagpole_x = 10 ** 9
@@ -268,28 +311,54 @@ def build_boss_level(level_num, sprites):
     enemy_group  = pygame.sprite.Group()
     coin_group   = pygame.sprite.Group()
 
-    COLS = 20
+    kind = 'city' if level_num > 4 else 'classic'
 
+    if kind == 'city':
+        # Bigger, more vertical arena for the city mech boss so the player has
+        # room to run and platforms to dodge lasers / reach the boss.
+        COLS = 30
+        platforms = {
+            11: [(3, 5), (24, 26)],   # low side ledges
+            9:  [(13, 16)],           # central platform
+            8:  [(8, 10), (19, 21)],  # high side platforms
+        }
+        coin_spots = [(4, 10), (14, 8), (15, 8), (9, 7), (20, 7), (25, 10)]
+        hp     = 6 + (boss_round - 2)   # mech boss starts at 6 HP
+        speed  = 1.5 + 0.2 * (boss_round - 2)
+        boss_x = (COLS // 2) * TILE_SIZE
+    else:
+        COLS = 20
+        platforms = {9: [(4, 5), (14, 15)]}
+        coin_spots = [(4, 8), (15, 8)]
+        hp     = 4 + (boss_round - 1)   # classic boss has 4 HP
+        speed  = 1.4 + 0.2 * (boss_round - 1)
+        boss_x = 560
+
+    data.level_width = max(SCREEN_WIDTH, COLS * TILE_SIZE)
+
+    # Ground.
     for col in range(COLS):
         tile_group.add(Tile(col * TILE_SIZE, 13 * TILE_SIZE, 'ground', sprites))
         tile_group.add(Tile(col * TILE_SIZE, 14 * TILE_SIZE, 'ground', sprites))
 
+    # Side walls.
     for r in range(6, 13):
-        tile_group.add(Tile(0,             r * TILE_SIZE, 'solid', sprites))
-        tile_group.add(Tile(19 * TILE_SIZE, r * TILE_SIZE, 'solid', sprites))
+        tile_group.add(Tile(0, r * TILE_SIZE, 'solid', sprites))
+        tile_group.add(Tile((COLS - 1) * TILE_SIZE, r * TILE_SIZE, 'solid', sprites))
 
-    for col in (4, 5):
-        tile_group.add(Tile(col * TILE_SIZE, 9 * TILE_SIZE, 'solid', sprites))
-    for col in (14, 15):
-        tile_group.add(Tile(col * TILE_SIZE, 9 * TILE_SIZE, 'solid', sprites))
-    for col in (4, 15):
-        coin_group.add(Coin(col * TILE_SIZE + TILE_SIZE // 2, 8 * TILE_SIZE + TILE_SIZE // 2,
-                            sprites))
+    # Platforms.
+    for row, spans in platforms.items():
+        for (c0, c1) in spans:
+            for c in range(c0, c1 + 1):
+                tile_group.add(Tile(c * TILE_SIZE, row * TILE_SIZE, 'solid', sprites))
 
-    hp    = 3 + (boss_round - 1)
-    speed = 1.4 + 0.2 * (boss_round - 1)
-    boss = Boss(560, 13 * TILE_SIZE, sprites, hp=hp, speed=speed)
-    boss.set_bounds(TILE_SIZE + 20, 19 * TILE_SIZE - 20)
+    # Coins.
+    for (c, r) in coin_spots:
+        coin_group.add(Coin(c * TILE_SIZE + TILE_SIZE // 2,
+                            r * TILE_SIZE + TILE_SIZE // 2, sprites))
+
+    boss = Boss(boss_x, 13 * TILE_SIZE, sprites, hp=hp, speed=speed, kind=kind)
+    boss.set_bounds(TILE_SIZE + 20, (COLS - 1) * TILE_SIZE - 20)
     data.boss = boss
 
     data.tile_group   = tile_group

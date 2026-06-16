@@ -19,6 +19,7 @@ class Particle(pygame.sprite.Sprite):
 
         self.text = ""
         self.font = None
+        self.screen_space = False
 
     @classmethod
     def create_debris(cls, x, y, sprites=None):
@@ -33,11 +34,15 @@ class Particle(pygame.sprite.Sprite):
         return particles
 
     @classmethod
-    def create_score(cls, x, y, text, font):
-        p       = cls(x, y, 0, -2.5, 'score_text')
+    def create_score(cls, x, y, text, font, color=(255, 224, 96)):
+        # x, y are SCREEN coordinates so the popup floats straight up from
+        # where the pickup happened instead of drifting as the camera scrolls.
+        p       = cls(x, y, 0, -2.2, 'score_text', color)
         p.text  = text
         p.font  = font
-        p.life  = 45
+        p.life  = 50
+        p.max_life = 50
+        p.screen_space = True
         return p
 
     @classmethod
@@ -92,8 +97,15 @@ class Particle(pygame.sprite.Sprite):
             rotated = pygame.transform.rotate(surf, self.angle)
             surface.blit(rotated, (draw_x, draw_y))
         elif self.particle_type == 'score_text' and self.font:
-            rendered = self.font.render(self.text, True, (255, 255, 255))
-            surface.blit(rendered, (draw_x, draw_y))
+            dx = self.x if self.screen_space else self.x - camera_x
+            dy = self.y
+            alpha = int(255 * min(1.0, self.life / (self.max_life * 0.6)))
+            shadow = self.font.render(self.text, True, (0, 0, 0))
+            main   = self.font.render(self.text, True, self.color)
+            shadow.set_alpha(alpha)
+            main.set_alpha(alpha)
+            surface.blit(shadow, (dx + 2, dy + 2))
+            surface.blit(main, (dx, dy))
         elif self.particle_type == 'spark':
             fade = max(0.0, self.life / max(1, self.max_life))
             r = max(1, int(4 * fade))

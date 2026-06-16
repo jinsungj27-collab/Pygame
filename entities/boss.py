@@ -8,8 +8,9 @@ from sounds import sfx_stomp, sfx_die, sfx_hazard
 
 
 class Fireball(pygame.sprite.Sprite):
-    def __init__(self, x, y, vx, vy):
+    def __init__(self, x, y, vx, vy, kind='classic'):
         super().__init__()
+        self.kind = kind
         self.x = float(x)
         self.y = float(y)
         self.vx = vx
@@ -42,18 +43,65 @@ class Fireball(pygame.sprite.Sprite):
         dx = int(self.x - camera_x)
         dy = int(self.y)
         flick = int(self.anim) % 2
-        outer = (255, 120, 20) if flick == 0 else (255, 80, 10)
-        pygame.draw.circle(surface, (120, 30, 0), (dx, dy), 12)
-        pygame.draw.circle(surface, outer,        (dx, dy), 10)
-        pygame.draw.circle(surface, (255, 220, 90), (dx, dy), 5)
+        if self.kind == 'city':
+            # Electric energy bolt.
+            outer = (90, 200, 255) if flick == 0 else (60, 170, 255)
+            pygame.draw.circle(surface, (20, 60, 130), (dx, dy), 12)
+            pygame.draw.circle(surface, outer,         (dx, dy), 10)
+            pygame.draw.circle(surface, (220, 245, 255), (dx, dy), 5)
+        else:
+            outer = (255, 120, 20) if flick == 0 else (255, 80, 10)
+            pygame.draw.circle(surface, (120, 30, 0), (dx, dy), 12)
+            pygame.draw.circle(surface, outer,        (dx, dy), 10)
+            pygame.draw.circle(surface, (255, 220, 90), (dx, dy), 5)
+
+
+class Laser(pygame.sprite.Sprite):
+    """Fast straight-flying energy beam used by the city mech boss."""
+    def __init__(self, x, y, vx):
+        super().__init__()
+        self.x = float(x)
+        self.y = float(y)
+        self.vx = vx
+        self.vy = 0.0
+        self.life = 150
+        self.anim = 0.0
+        self.rect = pygame.Rect(0, 0, 34, 12)
+        self.rect.center = (int(x), int(y))
+
+    def update(self, tiles=None):
+        self.x += self.vx
+        self.rect.center = (int(self.x), int(self.y))
+        self.anim += 0.6
+        # Beams are absorbed by walls/platforms.
+        if tiles is not None:
+            for t in tiles:
+                if self.rect.colliderect(t.rect):
+                    self.kill()
+                    return
+        self.life -= 1
+        if self.life <= 0:
+            self.kill()
+
+    def draw(self, surface, camera_x):
+        dx = int(self.x - camera_x)
+        dy = int(self.y)
+        flick = int(self.anim) % 2
+        core = (235, 250, 255) if flick == 0 else (205, 240, 255)
+        beam = pygame.Rect(dx - 17, dy - 5, 34, 10)
+        pygame.draw.rect(surface, (20, 60, 130), beam.inflate(4, 4), border_radius=5)
+        pygame.draw.rect(surface, (80, 185, 255), beam, border_radius=5)
+        pygame.draw.rect(surface, core, beam.inflate(-10, -4), border_radius=4)
 
 
 class Boss(pygame.sprite.Sprite):
     WIDTH, HEIGHT = 92, 96
 
-    def __init__(self, x, y, sprites, hp=4, speed=1.6):
+    def __init__(self, x, y, sprites, hp=4, speed=1.6, kind='classic'):
         super().__init__()
         self.sprites = sprites
+        self.kind = kind
+        self.sprite_set = sprites.boss_city if kind == 'city' else sprites.boss
         self.x = float(x)
         self.y = float(y)
         self.vx = -abs(speed)
@@ -75,7 +123,7 @@ class Boss(pygame.sprite.Sprite):
         self.left_bound = 80
         self.right_bound = 720
 
-        self.image = sprites.boss['walk1']
+        self.image = self.sprite_set['walk1']
         self.rect = pygame.Rect(0, 0, self.WIDTH, self.HEIGHT)
         self.rect.midbottom = (int(x), int(y))
 
@@ -111,6 +159,10 @@ class Boss(pygame.sprite.Sprite):
         self.rect.midbottom = (int(self.x), int(self.y))
         self.on_ground = False
         for t in tiles:
+            # The boss only stands on the ground floor, never on the floating
+            # platforms (those are there for the player to use).
+            if getattr(t, 'tile_type', None) != 'ground':
+                continue
             if self.rect.colliderect(t.rect) and self.vy > 0:
                 self.rect.bottom = t.rect.top
                 self.y = self.rect.bottom
@@ -124,12 +176,19 @@ class Boss(pygame.sprite.Sprite):
 
         self.shoot_timer -= 1
         if self.shoot_timer <= 0:
-            self.shoot_timer = random.randint(110, 180)
             direction = -1 if player.x < self.x else 1
-            fb = Fireball(self.rect.centerx + direction * 30,
-                          self.rect.top + 30,
-                          direction * 3.6, -3.0)
-            projectiles.add(fb)
+            if self.kind == 'city':
+                # Fast straight laser aimed at standing-player height.
+                self.shoot_timer = random.randint(85, 140)
+                proj = Laser(self.rect.centerx + direction * 44,
+                             self.rect.bottom - 30,
+                             direction * 8.0)
+            else:
+                self.shoot_timer = random.randint(110, 180)
+                proj = Fireball(self.rect.centerx + direction * 30,
+                                self.rect.top + 30,
+                                direction * 3.6, -3.0, kind=self.kind)
+            projectiles.add(proj)
             sfx_hazard()
 
         self.anim_frame += 0.12
@@ -154,7 +213,7 @@ class Boss(pygame.sprite.Sprite):
 
     def draw(self, surface, camera_x):
         frame = int(self.anim_frame) % 2
-        img = self.sprites.boss['walk1'] if frame == 0 else self.sprites.boss['walk2']
+        img = self.sprite_set['walk1'] if frame == 0 else self.sprite_set['walk2']
         if self.facing_right:
             img = pygame.transform.flip(img, True, False)
 

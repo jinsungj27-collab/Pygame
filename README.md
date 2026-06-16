@@ -1,4 +1,4 @@
-# Super Jin - Enhanced Edition v2.3.1
+# Super Jin - Enhanced Edition v2.3.7
 
 A fully-featured 2D platformer built from scratch in Python with pygame. Features endless procedurally-generated levels with parkour, boss battles, flying enemies, collectible coins, themed parallax backgrounds, a complete menu/settings system, and persistent high scores — all with zero external assets (graphics and music are synthesized at runtime).
 
@@ -161,7 +161,24 @@ Planned features: checkpoints, more power-ups, additional enemy types, fire-flow
 
 ## 📜 Version History
 
-### v2.2.0 (Current)
+### v2.3.7 (Current)
+- **City phase** after the first boss: the world switches to a parallax city
+  skyline with randomized building heights, lit windows, and a grassy street
+- **New enemy — Robot**: patrols city streets, turns at ledges, stompable
+- **New boss — Mega Mech**: a city-phase boss with **6 HP** (vs 4 for the
+  classic boss), fires straight **lasers** instead of bouncing balls, in a
+  larger arena with platforms to dodge and climb
+- **Randomized levels per playthrough** — obstacle layouts now differ every run
+  (and stay consistent across retries within a run)
+- The three power-up blocks are now spread across the level (mushroom randomized)
+  instead of clustered at the spawn
+- Modernized the stage-intro and stage-clear screens (card panels, "get ready"
+  progress bar, named boss intro)
+- Fixes: score popups float straight up from the pickup instead of drifting to
+  the HUD; the boss no longer stands on floating platforms; player spawns on the
+  ground; walking enemies no longer fall off ledges
+
+### v2.2.0
 - **Fullscreen by default** — the game now fills the whole screen, adapting the
   logical resolution to your monitor's aspect ratio (no black bars)
 - **Screen size options in Settings** — cycle between Fullscreen and several
