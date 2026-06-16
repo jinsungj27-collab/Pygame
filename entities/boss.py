@@ -155,15 +155,15 @@ class Boss(pygame.sprite.Sprite):
         self.facing_right = self.vx > 0
 
         self.vy = min(self.vy + GRAVITY, TERMINAL_VELOCITY)
+        prev_bottom = self.rect.bottom
         self.y += self.vy
         self.rect.midbottom = (int(self.x), int(self.y))
         self.on_ground = False
         for t in tiles:
-            # The boss only stands on the ground floor, never on the floating
-            # platforms (those are there for the player to use).
-            if getattr(t, 'tile_type', None) != 'ground':
-                continue
-            if self.rect.colliderect(t.rect) and self.vy > 0:
+            # Land on a surface only when descending onto it from above. This
+            # lets the boss jump up onto platforms (obstacles) without snagging
+            # on / climbing platforms it merely walks past at body height.
+            if self.rect.colliderect(t.rect) and self.vy > 0 and prev_bottom <= t.rect.top + 6:
                 self.rect.bottom = t.rect.top
                 self.y = self.rect.bottom
                 self.vy = 0

@@ -2,6 +2,7 @@ import pygame
 import math
 from constants import GRAVITY, TERMINAL_VELOCITY, SCREEN_HEIGHT
 from sounds import sfx_jump, sfx_shrink, sfx_die
+from settings import settings
 
 
 class Player(pygame.sprite.Sprite):
@@ -148,6 +149,8 @@ class Player(pygame.sprite.Sprite):
             self.vy = -4
 
     def take_damage(self):
+        if settings.god_mode:
+            return
         if self.invincible_timer > 0 or self.is_dead:
             return
         if self.is_big:
@@ -158,6 +161,8 @@ class Player(pygame.sprite.Sprite):
             self.die()
 
     def die(self):
+        if settings.god_mode:
+            return
         self.is_dead     = True
         self.death_timer = 120
         self.vy          = -10

@@ -14,6 +14,8 @@ class Settings:
         self.display_mode = 0
         # How many lives a new game starts with. -1 means infinite.
         self.starting_lives = 3
+        # God mode: player can't take damage or die (for testing).
+        self.god_mode = False
         self.load()
 
     def clamp(self):
@@ -37,6 +39,7 @@ class Settings:
             "music_enabled": self.music_enabled,
             "display_mode": self.display_mode,
             "starting_lives": self.starting_lives,
+            "god_mode": self.god_mode,
         }
 
     def load(self):
@@ -50,6 +53,7 @@ class Settings:
                 self.music_enabled = bool(d.get("music_enabled", self.music_enabled))
                 self.display_mode = int(d.get("display_mode", self.display_mode))
                 self.starting_lives = int(d.get("starting_lives", self.starting_lives))
+                self.god_mode = bool(d.get("god_mode", self.god_mode))
                 self.clamp()
         except Exception:
             pass

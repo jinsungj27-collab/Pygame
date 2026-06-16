@@ -198,17 +198,12 @@ def build_level(level_num, sprites, seed=0):
     enemy_spawns = []
     bird_spawns = []
 
-    # Three SEPARATE ? blocks spread across the level (one per third), each at
-    # its own random column and height. One of them holds the mushroom.
+    # Three SEPARATE ? blocks, one in each third of the level. One holds the
+    # mushroom (randomized). They are placed after the level features so we can
+    # guarantee each sits at a jump-reachable height over solid, clear ground.
     span_start = SAFE_START + 4
     span_end   = SAFE_END - 8
     zone = max(6, (span_end - span_start) // 3)
-    block_slots = []
-    for z in range(3):
-        z0 = span_start + z * zone
-        bc = z0 + rng.randint(0, max(1, zone - 4))
-        br = rng.choice([8, 9, 10])
-        block_slots.append((bc, br))
     mush_idx = rng.randint(0, 2)
 
     col = SAFE_START + 4
@@ -224,12 +219,23 @@ def build_level(level_num, sprites, seed=0):
                              coins, enemy_spawns, bird_spawns, rng, diff,
                              is_city=(level_num > 4))
 
-    # Place the power-up blocks after features so they sit on top, and never
-    # over a pit column.
-    for i, (bc, br) in enumerate(block_slots):
-        if bc in gap_cols:
-            bc += 1
-        layout[(bc, br)] = 'M' if i == mush_idx else 'Q'
+    # Row 9 is a comfortable single-jump height above the ground; pick a column
+    # in each zone that is over solid ground with clear space below to jump in.
+    BLOCK_ROW = 9
+    for i in range(3):
+        z0 = span_start + i * zone
+        chosen = None
+        for _ in range(16):
+            bc = z0 + rng.randint(0, max(1, zone - 4))
+            if bc in gap_cols:
+                continue
+            if any((bc, rr) in layout for rr in range(BLOCK_ROW, 13)):
+                continue  # column must be clear below the block
+            chosen = bc
+            break
+        if chosen is None:
+            continue
+        layout[(chosen, BLOCK_ROW)] = 'M' if i == mush_idx else 'Q'
 
     _create_staircase(flag_col - 7, 12, size=min(4 + diff, 6),
                       ascends_right=True, layout=layout)

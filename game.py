@@ -155,6 +155,9 @@ class Game:
         self.btn_reset   = Button(right_cx, 276, 280, 46, "RESET PROGRESS",
                                   self.font_small, base_color=(120, 50, 50),
                                   hover_color=(170, 70, 70))
+        self.btn_god     = Button(right_cx, 336, 280, 46, self._god_label(),
+                                  self.font_small, base_color=(40, 95, 65),
+                                  hover_color=(60, 150, 95))
 
         self.btn_tos   = Button(cx - 100, 474, 188, 44, "TERMS OF SERVICE",
                                 self.font_small,
@@ -194,6 +197,9 @@ class Game:
         n = settings.starting_lives
         return f"Lives: {'Infinite' if n < 0 else n}"
 
+    def _god_label(self):
+        return f"God Mode: {'ON' if settings.god_mode else 'OFF'}"
+
     def apply_selected_character(self):
         """Recolor the player sprites and set the jump sound for the equipped
         character + skin stored in self.progress."""
@@ -224,6 +230,11 @@ class Game:
     def start_new_game(self):
         self.score     = 0
         self.coins     = 0
+        # Coins/blocks already collected this run stay collected across deaths;
+        # they only reappear on a brand-new game. This also makes farming
+        # impossible. Keyed by (level_num, x, y).
+        self.collected_coins = set()
+        self.spent_blocks = set()
         # Fresh random layout seed so obstacles differ every playthrough
         # (but stay stable across retries within this run).
         self.run_seed  = random.randrange(1, 1 << 30)
@@ -264,6 +275,19 @@ class Game:
         self.projectile_group = pygame.sprite.Group()
         self.coin_group     = self.level.coin_group
         self.boss = self.level.boss
+
+        # Remove coins already collected this run and mark already-used ? blocks
+        # as spent, so they don't reappear when retrying after a death.
+        collected = getattr(self, 'collected_coins', set())
+        for c in list(self.coin_group):
+            if (level_num, c.rect.centerx, c.rect.centery) in collected:
+                c.kill()
+        spent = getattr(self, 'spent_blocks', set())
+        for t in self.tile_group:
+            if getattr(t, 'tile_type', None) == 'question' and \
+                    (level_num, t.rect.x, t.rect.y) in spent:
+                t.tile_type = 'spent'
+                t.contains_item = None
 
         # Spawn standing on the ground (row 13) instead of dropping from the
         # sky. The sprite is anchored at y + 40, so y = ground_top - 40.
@@ -332,7 +356,14 @@ class Game:
             self.player.rect.centerx = self.player.x
 
         if self.player.y > SCREEN_HEIGHT + 50:
-            self.player.die()
+            if settings.god_mode:
+                # Don't die in pits - re-enter from the top so testing can
+                # continue (air-steer back onto solid ground).
+                self.player.y  = -40
+                self.player.vy = 0
+                self.player.rect.y = int(self.player.y)
+            else:
+                self.player.die()
 
         if (self.player.invincible_timer <= 0 and not self.player.is_dead
                 and pygame.sprite.spritecollide(self.player, self.hazard_group, False)):
@@ -341,12 +372,17 @@ class Game:
 
         for coin in pygame.sprite.spritecollide(self.player, self.coin_group, True):
             self.coins += COIN_VALUE
-            self.wallet += COIN_VALUE
+            self.collected_coins.add((self.level_num, coin.rect.centerx, coin.rect.centery))
             self.score += 200
             sfx_coin()
+            sx = coin.rect.x - self.camera_x
             self.particle_group.add(
-                Particle.create_score(coin.rect.x - self.camera_x, coin.rect.y - 10,
-                                      "200", self.font_hud)
+                Particle.create_score(sx, coin.rect.y - 18, "200", self.font_hud,
+                                      color=(255, 255, 255))
+            )
+            self.particle_group.add(
+                Particle.create_score(sx, coin.rect.y + 8, f"+{COIN_VALUE}", self.font_hud,
+                                      color=(255, 215, 70))
             )
 
         for item in pygame.sprite.spritecollide(self.player, self.item_group, False):
@@ -404,18 +440,24 @@ class Game:
         if tile.tile_type == 'question':
             if tile.contains_item == 'coin':
                 self.coins += COIN_VALUE
-                self.wallet += COIN_VALUE
                 self.score += 200
                 self.item_group.add(Item(tile.rect.x, tile.rect.y, 'coin', self.sprites))
+                sx = tile.rect.x - self.camera_x
                 self.particle_group.add(
-                    Particle.create_score(tile.rect.x - self.camera_x, tile.rect.y - 20,
-                                          "200", self.font_hud)
+                    Particle.create_score(sx, tile.rect.y - 28, "200", self.font_hud,
+                                          color=(255, 255, 255))
+                )
+                self.particle_group.add(
+                    Particle.create_score(sx, tile.rect.y - 4, f"+{COIN_VALUE}", self.font_hud,
+                                          color=(255, 215, 70))
                 )
             elif tile.contains_item == 'mushroom':
                 sfx_powerup_spawn()
                 self.item_group.add(Item(tile.rect.x, tile.rect.y, 'mushroom', self.sprites))
             tile.tile_type     = 'spent'
             tile.contains_item = None
+            # Remember this block so it stays spent after a death-retry.
+            self.spent_blocks.add((self.level_num, tile.rect.x, tile.rect.y))
 
         elif tile.tile_type == 'brick' and self.player.is_big:
             tile.kill()
@@ -511,6 +553,10 @@ class Game:
 
     def _on_game_over(self):
         stop_music()
+        # Bank the run's coins into the persistent wallet now that the game has
+        # truly ended (this is the only place coins are committed, which stops
+        # death-respawn coin farming, especially with infinite lives).
+        self.wallet += self.coins
         self.new_record = self.score > self.prev_high
         if self.score > self.high_score:
             self.high_score = self.score
@@ -885,7 +931,7 @@ class Game:
         return rect
 
     def _boss_name(self):
-        return "MEGA MECH" if self.is_boss and self.theme.get('city') else "THE BEAST"
+        return "MEGA MECH" if self.is_boss and self.theme.get('city') else "GORTHRAX"
 
     def draw_intro(self):
         self._draw_background(self.camera_x)
@@ -963,8 +1009,10 @@ class Game:
         self.btn_music_toggle.label = self._music_label()
         self.btn_display.label = self._display_label()
         self.btn_lives.label = self._lives_label()
+        self.btn_god.label = self._god_label()
         for b in (self.btn_music_toggle, self.btn_lives, self.btn_display,
-                  self.btn_reset, self.btn_tos, self.btn_legal, self.btn_back):
+                  self.btn_reset, self.btn_god, self.btn_tos, self.btn_legal,
+                  self.btn_back):
             b.update(mp)
             b.draw(self.screen)
 
@@ -1233,6 +1281,10 @@ class Game:
         elif self.btn_reset.is_clicked(event):
             sfx_menu_select()
             self.reset_confirm = True
+        elif self.btn_god.is_clicked(event):
+            sfx_menu_select()
+            settings.god_mode = not settings.god_mode
+            settings.save()
         elif self.btn_tos.is_clicked(event):
             sfx_menu_select()
             self.tos_scroll = 0.0
