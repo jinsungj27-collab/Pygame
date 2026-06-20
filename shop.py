@@ -163,6 +163,7 @@ import pygame
 from constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from ui import Button
 from sounds import sfx_menu_select, sfx_powerup, sfx_block_bump
+from skills import get_skills
 
 
 class ShopScreen:
@@ -176,6 +177,10 @@ class ShopScreen:
         self.message = ""
         self.message_timer = 0
         self.confirm = None              # pending purchase awaiting confirmation
+        self.info = None                 # character whose info panel is open
+        # Which character's skins the SKINS tab shows. Lets the player preview
+        # the skins of characters they haven't bought yet.
+        self.view_char_id = game.progress['selected_character']
 
         cx = SCREEN_WIDTH // 2
         f = game.font_small
@@ -191,11 +196,17 @@ class ShopScreen:
                                      game.font_menu, base_color=(120, 40, 40),
                                      hover_color=(170, 60, 60))
 
+        # Close button for the character info panel.
+        self.btn_info_close = Button(cx, SCREEN_HEIGHT - 70, 200, 50, "CLOSE",
+                                     game.font_menu, base_color=(40, 60, 120),
+                                     hover_color=(60, 90, 170))
+
     def _preview(self, char_id, skin_id, scale=3):
         key = (char_id, skin_id, scale)
         if key not in self._preview_cache:
             palette = character_palette(char_id, skin_id)
-            self._preview_cache[key] = self.game.sprites.make_preview(palette, scale)
+            self._preview_cache[key] = self.game.sprites.make_preview(
+                char_id, palette, scale)
         return self._preview_cache[key]
 
     def _notify(self, text):
@@ -259,6 +270,11 @@ class ShopScreen:
             self._handle_confirm_event(event)
             return False
 
+        # The info panel captures input while open.
+        if self.info is not None:
+            self._handle_info_event(event)
+            return False
+
         if event.type == pygame.KEYDOWN and event.key in (
                 pygame.K_ESCAPE, pygame.K_BACKSPACE):
             sfx_menu_select()
@@ -272,6 +288,8 @@ class ShopScreen:
             return False
         if self.btn_tab_skins.is_clicked(event):
             sfx_menu_select()
+            # Default the skins view to the equipped character.
+            self.view_char_id = self._equipped_char()
             self.tab = 'skins'
             return False
 
@@ -284,7 +302,15 @@ class ShopScreen:
 
     def _on_action_click(self, action, payload):
         kind, char, skin = payload
-        if action == 'use':
+        if action == 'view':
+            # Preview this character's skins (works for unowned characters).
+            sfx_menu_select()
+            self.view_char_id = char['id']
+            self.tab = 'skins'
+        elif action == 'info':
+            sfx_menu_select()
+            self.info = char
+        elif action == 'use':
             if kind == 'char':
                 owned = self.game.progress['owned_skins'].get(char['id'], [])
                 skin_id = owned[0] if owned else char['skins'][0]['id']
@@ -314,6 +340,16 @@ class ShopScreen:
                 self._buy_character(c['char'])
             else:
                 self._buy_skin(c['char'], c['skin'])
+
+    def _handle_info_event(self, event):
+        if event.type == pygame.KEYDOWN and event.key in (
+                pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            sfx_menu_select()
+            self.info = None
+            return
+        if self.btn_info_close.is_clicked(event):
+            sfx_menu_select()
+            self.info = None
 
     # --- drawing --------------------------------------------------------
     def draw(self):
@@ -349,6 +385,9 @@ class ShopScreen:
 
         if self.confirm is not None:
             self._draw_confirm()
+
+        if self.info is not None:
+            self._draw_info()
 
     def _draw_confirm(self):
         game = self.game
@@ -436,11 +475,29 @@ class ShopScreen:
             if action:
                 self._cells.append((btn_rect, action, ('char', char, None)))
 
+            # An "i" info icon (top-right) opens this character's skill info.
+            info_rect = self._draw_info_icon(rect, mp)
+            self._cells.append((info_rect, 'info', ('char', char, None)))
+
+            # Clicking the sprite/preview area previews this character's skins
+            # (even when it isn't owned yet).
+            view_rect = pygame.Rect(rect.x, rect.y, rect.width, 60)
+            self._cells.append((view_rect, 'view', ('char', char, None)))
+
     def _draw_skins(self):
         game = self.game
-        char = get_character(self._equipped_char())
+        char = get_character(self.view_char_id)
+        owns_char = self._owns_char(char['id'])
         head = game.font_menu.render(f"{char['name']}'s Suits", True, (255, 255, 255))
         game.screen.blit(head, (SCREEN_WIDTH // 2 - head.get_width() // 2, 142))
+
+        # When previewing a character you don't own yet, make it clear the
+        # suits are view-only until the character is unlocked.
+        if not owns_char:
+            note = game.font_small.render(
+                f"Preview only - buy {char['name']} to unlock these suits",
+                True, (255, 200, 130))
+            game.screen.blit(note, (SCREEN_WIDTH // 2 - note.get_width() // 2, 172))
 
         skins = char['skins']
         cols = min(len(skins), 4)
@@ -449,22 +506,26 @@ class ShopScreen:
         gap = 26
         total_w = cols * cell_w + (cols - 1) * gap
         start_x = SCREEN_WIDTH // 2 - total_w // 2
-        top = 196
+        top = 200
         mp = game._logical_mouse()
 
         for i, skin in enumerate(skins):
             rect = pygame.Rect(start_x + i * (cell_w + gap), top, cell_w, cell_h)
             preview = self._preview(char['id'], skin['id'], scale=3)
-            equipped = (self._equipped_char() == char['id']
-                        and self._equipped_skin() == skin['id'])
-            if equipped:
-                status, action, btn_label = 'equipped', None, "EQUIPPED"
-            elif self._owns_skin(char['id'], skin['id']):
-                status, action, btn_label = 'owned', 'use', "USE"
-            elif skin_price(skin) == 0:
-                status, action, btn_label = 'owned', 'use', "USE"
+            if not owns_char:
+                # View-only: show the suit but it can't be equipped/bought yet.
+                status, action, btn_label = 'locked', None, "LOCKED"
             else:
-                status, action, btn_label = 'locked', 'buy', f"BUY  {skin_price(skin)}"
+                equipped = (self._equipped_char() == char['id']
+                            and self._equipped_skin() == skin['id'])
+                if equipped:
+                    status, action, btn_label = 'equipped', None, "EQUIPPED"
+                elif self._owns_skin(char['id'], skin['id']):
+                    status, action, btn_label = 'owned', 'use', "USE"
+                elif skin_price(skin) == 0:
+                    status, action, btn_label = 'owned', 'use', "USE"
+                else:
+                    status, action, btn_label = 'locked', 'buy', f"BUY  {skin_price(skin)}"
             btn_rect = self._draw_item_panel(rect, preview, skin['name'], "",
                                              status, btn_label, mp)
             if action:
@@ -523,3 +584,117 @@ class ShopScreen:
         screen.blit(bt, (btn_rect.centerx - bt.get_width() // 2,
                          btn_rect.centery - bt.get_height() // 2))
         return btn_rect
+
+    def _draw_info_icon(self, cell_rect, mp):
+        """Draw a small circular 'i' info badge in the cell's top-right
+        corner and return its clickable rect."""
+        screen = self.game.screen
+        r = 11
+        cx = cell_rect.right - r - 6
+        cy = cell_rect.y + r + 6
+        rect = pygame.Rect(cx - r, cy - r, r * 2, r * 2)
+        hovered = rect.collidepoint(mp)
+        fill = (80, 150, 230) if hovered else (40, 90, 160)
+        pygame.draw.circle(screen, fill, (cx, cy), r)
+        pygame.draw.circle(screen, (200, 225, 255), (cx, cy), r, 2)
+        it = self.game.font_small.render("i", True, (255, 255, 255))
+        screen.blit(it, (cx - it.get_width() // 2, cy - it.get_height() // 2))
+        return rect
+
+    @staticmethod
+    def _wrap_text(text, font, max_w):
+        """Break text into lines that fit within max_w pixels."""
+        words = text.split()
+        lines = []
+        cur = ""
+        for w in words:
+            trial = w if not cur else cur + " " + w
+            if font.size(trial)[0] <= max_w:
+                cur = trial
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+        return lines
+
+    def _draw_info(self):
+        game = self.game
+        screen = game.screen
+        game._dim(180)
+
+        char = self.info
+        q_def, ult_def = get_skills(char['id'])
+
+        bw, bh = 740, 486
+        box = pygame.Rect(SCREEN_WIDTH // 2 - bw // 2, SCREEN_HEIGHT // 2 - bh // 2 - 6,
+                          bw, bh)
+        pygame.draw.rect(screen, (18, 24, 52), box, border_radius=16)
+        pygame.draw.rect(screen, (90, 120, 210), box, width=3, border_radius=16)
+
+        # Title.
+        title = game.font_title.render(char['name'], True, (255, 230, 120))
+        screen.blit(title, (box.centerx - title.get_width() // 2, box.y + 16))
+        sub = game.font_small.render(char['desc'], True, (200, 210, 235))
+        screen.blit(sub, (box.centerx - sub.get_width() // 2, box.y + 56))
+
+        # Left column: big character preview.
+        preview = self._preview(char['id'], char['skins'][0]['id'], scale=4)
+        left_cx = box.x + 110
+        screen.blit(preview, (left_cx - preview.get_width() // 2, box.y + 96))
+
+        # Skin previews row (so the player can review suits before buying).
+        sk_label = game.font_small.render("SUITS", True, (180, 200, 240))
+        screen.blit(sk_label, (left_cx - sk_label.get_width() // 2, box.y + 210))
+        sx = box.x + 28
+        sy = box.y + 236
+        for skin in char['skins']:
+            sp = self._preview(char['id'], skin['id'], scale=2)
+            screen.blit(sp, (sx, sy))
+            nm = game.font_small.render(skin['name'], True, (210, 215, 235))
+            if nm.get_width() > 84:
+                nm = pygame.transform.smoothscale(
+                    nm, (84, nm.get_height()))
+            screen.blit(nm, (sx + sp.get_width() // 2 - nm.get_width() // 2,
+                             sy + sp.get_height() + 2))
+            sx += sp.get_width() + 16
+
+        # Right column: the two skills.
+        rx = box.x + 230
+        rw = box.right - rx - 28
+        y = box.y + 100
+        for key, sdef, cd in (('Q', q_def, '5s'), ('E', ult_def, '30s')):
+            is_off = sdef['kind'] == 'off'
+            accent = (255, 150, 80) if is_off else (90, 190, 255)
+            tag = "OFFENSIVE" if is_off else "DEFENSIVE"
+            ult = " (ULTIMATE)" if key == 'E' else ""
+
+            # Key badge.
+            badge = pygame.Rect(rx, y, 26, 26)
+            pygame.draw.rect(screen, (15, 18, 30), badge, border_radius=6)
+            pygame.draw.rect(screen, accent, badge, width=2, border_radius=6)
+            kt = game.font_menu.render(key, True, (255, 255, 255))
+            screen.blit(kt, (badge.centerx - kt.get_width() // 2,
+                             badge.centery - kt.get_height() // 2))
+
+            name = game.font_menu.render(sdef['name'] + ult, True, (255, 255, 255))
+            screen.blit(name, (rx + 36, y - 2))
+            meta = game.font_small.render(f"{tag}  -  {cd} cooldown", True, accent)
+            screen.blit(meta, (rx + 36, y + 26))
+
+            y += 52
+            for line in self._wrap_text(sdef['desc'], game.font_small, rw):
+                lt = game.font_small.render(line, True, (210, 216, 234))
+                screen.blit(lt, (rx + 4, y))
+                y += 22
+            y += 18
+
+        hint = game.font_small.render(
+            "Skills are usable in boss battles.", True, (170, 180, 205))
+        screen.blit(hint, (rx + 4, box.bottom - 96))
+
+        mp = game._logical_mouse()
+        self.btn_info_close.rect.center = (box.centerx, box.bottom - 34)
+        self.btn_info_close.update(mp)
+        self.btn_info_close.draw(screen)

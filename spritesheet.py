@@ -1,5 +1,6 @@
 import pygame
 from sprites import make_sprite
+from char_art import build_small_frames
 from sprites import (
     SMALL_MARIO_IDLE, SMALL_MARIO_WALK1, SMALL_MARIO_WALK2, SMALL_MARIO_WALK3,
     SMALL_MARIO_JUMP, SMALL_MARIO_DUCK,
@@ -436,7 +437,7 @@ def _make_overlord(frame):
 
 class SpriteSheet:
     def __init__(self):
-        self.apply_character(None)
+        self.apply_character('jin', None)
 
         self.blocks = {
             'ground':    _make(BLOCK_GROUND),
@@ -510,46 +511,42 @@ class SpriteSheet:
             return self.boss_variants[key]
         return self.boss
 
-    def apply_character(self, palette):
-        """Rebuild the player sprite sets recolored with the given palette.
+    def apply_character(self, char_id=None, palette=None):
+        """Rebuild the player sprite sets for the equipped character + skin.
 
-        palette maps palette chars to RGB colors. Passing None uses the
-        original Mario colors. This is called whenever the player equips a
-        different character or skin in the Shop.
+        Each character has its own procedurally drawn silhouette (see
+        char_art); palette supplies the recolorable identity ('r'), suit
+        ('b'), skin ('s') and accent ('k') colors. The big form is the small
+        art scaled up, and the left-facing sets are horizontal flips.
         """
-        self.player_small = {
-            'idle':  _make(SMALL_MARIO_IDLE,  palette=palette),
-            'walk1': _make(SMALL_MARIO_WALK1, palette=palette),
-            'walk2': _make(SMALL_MARIO_WALK2, palette=palette),
-            'walk3': _make(SMALL_MARIO_WALK3, palette=palette),
-            'jump':  _make(SMALL_MARIO_JUMP,  palette=palette),
-            'duck':  _make(SMALL_MARIO_DUCK,  palette=palette),
-        }
+        char_id = char_id or 'jin'
+        pal = palette or {}
+        prim = pal.get('r', (220, 30, 30))
+        suit = pal.get('b', (30, 80, 200))
+        skin = pal.get('s', (255, 200, 150))
+        hair = pal.get('k', (60, 45, 25))
+
+        small = build_small_frames(char_id, prim, suit, skin, hair)
+        self.player_small = small
         self.player_small_left = {
-            'idle':  _make(SMALL_MARIO_IDLE,  flip_x=True, palette=palette),
-            'walk1': _make(SMALL_MARIO_WALK1, flip_x=True, palette=palette),
-            'walk2': _make(SMALL_MARIO_WALK2, flip_x=True, palette=palette),
-            'walk3': _make(SMALL_MARIO_WALK3, flip_x=True, palette=palette),
-            'jump':  _make(SMALL_MARIO_JUMP,  flip_x=True, palette=palette),
-            'duck':  _make(SMALL_MARIO_DUCK,  flip_x=True, palette=palette),
+            k: pygame.transform.flip(v, True, False) for k, v in small.items()
         }
-        self.player_big = {
-            'idle':  _make(BIG_MARIO_IDLE,  palette=palette),
-            'walk1': _make(BIG_MARIO_WALK1, palette=palette),
-            'walk2': _make(BIG_MARIO_WALK2, palette=palette),
-            'walk3': _make(BIG_MARIO_WALK3, palette=palette),
-            'jump':  _make(BIG_MARIO_JUMP,  palette=palette),
-            'duck':  _make(BIG_MARIO_DUCK,  palette=palette),
-        }
+        big = {k: pygame.transform.scale(v, (40, 80)) for k, v in small.items()}
+        self.player_big = big
         self.player_big_left = {
-            'idle':  _make(BIG_MARIO_IDLE,  flip_x=True, palette=palette),
-            'walk1': _make(BIG_MARIO_WALK1, flip_x=True, palette=palette),
-            'walk2': _make(BIG_MARIO_WALK2, flip_x=True, palette=palette),
-            'walk3': _make(BIG_MARIO_WALK3, flip_x=True, palette=palette),
-            'jump':  _make(BIG_MARIO_JUMP,  flip_x=True, palette=palette),
-            'duck':  _make(BIG_MARIO_DUCK,  flip_x=True, palette=palette),
+            k: pygame.transform.flip(v, True, False) for k, v in big.items()
         }
 
-    def make_preview(self, palette, scale=3):
-        """A single idle sprite recolored with palette, for shop thumbnails."""
-        return make_sprite(SMALL_MARIO_IDLE, scale=scale, palette=palette)
+    def make_preview(self, char_id, palette, scale=3):
+        """A single idle sprite for shop thumbnails, sized to `scale`."""
+        pal = palette or {}
+        idle = build_small_frames(
+            char_id,
+            pal.get('r', (220, 30, 30)),
+            pal.get('b', (30, 80, 200)),
+            pal.get('s', (255, 200, 150)),
+            pal.get('k', (60, 45, 25)),
+        )['idle']
+        factor = scale / 2.5
+        return pygame.transform.scale(
+            idle, (int(idle.get_width() * factor), int(idle.get_height() * factor)))

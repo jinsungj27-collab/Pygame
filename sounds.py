@@ -109,6 +109,9 @@ def sfx_pause():
 def sfx_unpause():
     play_synth_sound([440, 880], 0.12, 'sine', volume=0.1)
 
+def sfx_dash():
+    play_synth_sound([900, 1300, 600], 0.13, 'sine', volume=0.11)
+
 def sfx_level_start():
     play_synth_sound([523, 659, 784, 1046], 0.4, 'square', volume=0.09)
 

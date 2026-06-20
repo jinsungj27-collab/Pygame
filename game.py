@@ -26,11 +26,12 @@ from sounds import (
 )
 from entities import Player, Enemy, Item, Tile, Particle
 from legal import TOS_TEXT, LEGAL_TEXT
+from skills import SkillManager
 
 
-MENU, INTRO, PLAYING, PAUSED, SETTINGS, CLEAR, GAMEOVER, TOS, LEGAL, SHOP, MODESELECT = (
+MENU, INTRO, PLAYING, PAUSED, SETTINGS, CLEAR, GAMEOVER, TOS, LEGAL, SHOP, MODESELECT, CONTROLS = (
     'menu', 'intro', 'playing', 'paused', 'settings', 'clear', 'gameover',
-    'tos', 'legal', 'shop', 'modeselect'
+    'tos', 'legal', 'shop', 'modeselect', 'controls'
 )
 
 # Game modes selected from the mode-select screen.
@@ -68,8 +69,9 @@ class Game:
         self.screen = self.render
         self._dst = pygame.Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
         self._scale = 1.0
+        self.render_shake = (0, 0)
         self._apply_display_mode()
-        pygame.display.set_caption("Super Jin  v2.4.0")
+        pygame.display.set_caption("Super Jin  v2.5.0")
         self.clock = pygame.time.Clock()
 
         self.font_hud   = pygame.font.Font(None, 24); self.font_hud.set_bold(True)
@@ -190,6 +192,13 @@ class Game:
                                 base_color=(50, 50, 80), hover_color=(80, 80, 130))
         self.btn_back = Button(cx, 534, 200, 50, "BACK", self.font_menu)
 
+        # CONTROLS button (opens the dedicated controls/how-to-play screen)
+        # plus that screen's own back button.
+        self.btn_controls = Button(cx, 424, 300, 44, "HOW TO PLAY",
+                                   self.font_small, base_color=(46, 70, 120),
+                                   hover_color=(74, 108, 184))
+        self.btn_controls_back = Button(cx, 542, 200, 50, "BACK", self.font_menu)
+
         # Reset-progress confirmation dialog.
         self.reset_confirm = False
         self.btn_reset_yes = Button(cx - 115, 360, 190, 54, "YES, RESET",
@@ -230,7 +239,7 @@ class Game:
         char_id = self.progress['selected_character']
         skin_id = self.progress['selected_skin']
         palette = character_palette(char_id, skin_id)
-        self.sprites.apply_character(palette)
+        self.sprites.apply_character(char_id, palette)
         char = get_character(char_id)
         freqs, wave = char.get('jump', ([160, 680, 820], 'square'))
         set_jump_profile(freqs, wave)
@@ -326,6 +335,13 @@ class Game:
         spawn_y = 13 * TILE_SIZE - 40
         self.player = Player(100, spawn_y, self.sprites)
         self.player_group = pygame.sprite.GroupSingle(self.player)
+
+        # Combat skills are only active in boss battles. A fresh manager is
+        # created for each boss so both skills start on the short cooldown.
+        if self.is_boss and self.boss is not None:
+            self.skills = SkillManager(self, self.progress['selected_character'])
+        else:
+            self.skills = None
 
     def reset_current_level(self):
         # On a boss level, keep the damage already dealt to the boss so dying
@@ -649,6 +665,8 @@ class Game:
             self.boss.update(self.tile_group, self.projectile_group, self.player)
             self.projectile_group.update(self.tile_group)
             self._handle_boss_combat()
+            if self.skills is not None:
+                self.skills.update()
 
         self.handle_collisions()
         self.check_stage_clear()
@@ -832,7 +850,14 @@ class Game:
         for label, value, color, icon in cards:
             w = self._measure_card(label, value, icon)
             self._draw_hud_card(x, y, w, h, label, value, color, icon)
+            if label == 'SCORE':
+                self._hud_score_x = x
+            elif label == 'COINS':
+                self._hud_coins_x = x
             x += w + 10
+
+        # Where the Q / Ultimate skill cards sit (just under the HUD cards).
+        self._hud_skill_y = y + h + 6
 
         self._draw_lives_card(y, h)
 
@@ -922,10 +947,17 @@ class Game:
             self.boss.draw(self.screen, self.camera_x)
         for proj     in self.projectile_group: proj.draw(self.screen, self.camera_x)
         self.player.draw(self.screen, self.camera_x)
+        if self.is_boss and self.skills is not None:
+            self.skills.draw_world(self.screen, self.camera_x)
         for particle in self.particle_group: particle.draw(self.screen, self.camera_x)
         self._draw_hud()
         if self.is_boss and self.boss is not None and not self.boss.is_dead:
             self._draw_boss_health()
+        if self.is_boss and self.skills is not None:
+            self.skills.draw_hud(self.screen, self._hud_score_x,
+                                 self._hud_coins_x, self._hud_skill_y,
+                                 self.font_small)
+            self.render_shake = self.skills.camera_shake_offset()
 
     def _draw_boss_health(self):
         boss = self.boss
@@ -973,7 +1005,7 @@ class Game:
             b.update(mp)
             b.draw(self.screen)
 
-        tip = self.font_small.render("v2.4.0  -  Enhanced Edition", True, (220, 220, 230))
+        tip = self.font_small.render("v2.5.0  -  Enhanced Edition", True, (220, 220, 230))
         self.screen.blit(tip, (SCREEN_WIDTH // 2 - tip.get_width() // 2, 560))
 
     def draw_modeselect(self):
@@ -1119,22 +1151,70 @@ class Game:
         self.btn_lives.label = self._lives_label()
         self.btn_god.label = self._god_label()
         for b in (self.btn_music_toggle, self.btn_lives, self.btn_display,
-                  self.btn_reset, self.btn_god, self.btn_tos, self.btn_legal,
-                  self.btn_back):
+                  self.btn_reset, self.btn_god, self.btn_controls,
+                  self.btn_tos, self.btn_legal, self.btn_back):
             b.update(mp)
             b.draw(self.screen)
 
-        # Compact controls reminder near the bottom.
-        guide = ("Move: Arrows / A D    Jump: Space / W / Up    "
-                 "Duck: Down / S    Pause: Esc    Fullscreen: F11")
-        txt = self.font_small.render(guide, True, (210, 218, 235))
-        if txt.get_width() > SCREEN_WIDTH - 60:
-            txt = pygame.transform.smoothscale(
-                txt, (SCREEN_WIDTH - 60, txt.get_height()))
-        self.screen.blit(txt, (cx - txt.get_width() // 2, 428))
-
         if self.reset_confirm:
             self._draw_reset_confirm()
+
+    def draw_controls(self):
+        """A dedicated, organized 'How to Play' screen. Lists movement, skills
+        and system keys. Built to grow as more skills are added later."""
+        if self.settings_return == MENU:
+            self._draw_background(self.menu_scroll)
+        else:
+            self._draw_world()
+        self._dim(185)
+        self._draw_title_banner("HOW TO PLAY", 28, color=(255, 220, 0), big=False)
+
+        cx = SCREEN_WIDTH // 2
+        panel = self._draw_card(cx, 316, 660, 430, (120, 160, 240))
+
+        # (section title, [(action, keys, optional note), ...])
+        sections = [
+            ("MOVEMENT", [
+                ("Move Left / Right", "Arrow Keys   or   A / D", None),
+                ("Jump  (double jump)", "Space  /  W  /  Up", None),
+                ("Duck  /  Fast Drop", "Down  /  S", None),
+            ]),
+            ("SKILLS", [
+                ("Dash", "Left Shift   or   Right Shift",
+                 "Instantly dash in the direction you're facing."),
+                ("Skill 1", "Q",
+                 "Your hero's quick skill (5s). Boss battles only."),
+                ("Ultimate", "E",
+                 "Your hero's powerful Ultimate (30s). Boss battles only."),
+            ]),
+            ("SYSTEM", [
+                ("Pause", "Esc", None),
+                ("Fullscreen", "F11", None),
+            ]),
+        ]
+
+        lx = panel.x + 34
+        rx = panel.right - 34
+        y = panel.y + 24
+        for title, rows in sections:
+            hdr = self.font_menu.render(title, True, (255, 230, 120))
+            self.screen.blit(hdr, (lx, y))
+            y += 34
+            for action, keys, note in rows:
+                a = self.font_small.render(action, True, (235, 240, 250))
+                self.screen.blit(a, (lx + 12, y))
+                k = self.font_small.render(keys, True, (150, 220, 255))
+                self.screen.blit(k, (rx - k.get_width(), y))
+                y += 24
+                if note:
+                    nt = self.font_small.render(note, True, (165, 175, 200))
+                    self.screen.blit(nt, (lx + 12, y))
+                    y += 22
+            y += 12
+
+        mp = self._logical_mouse()
+        self.btn_controls_back.update(mp)
+        self.btn_controls_back.draw(self.screen)
 
     def _draw_reset_confirm(self):
         self._dim(170)
@@ -1231,14 +1311,30 @@ class Game:
             accent, title = (255, 120, 120), "BOSS DEFEATED!"
         else:
             accent, title = (255, 226, 72), "STAGE CLEAR!"
-        rect = self._draw_card(cx, cy, 540, 220, accent)
-        self._draw_title_banner(title, rect.y + 34, color=accent)
+
+        card_w, card_h = 600, 250
+        rect = self._draw_card(cx, cy, card_w, card_h, accent)
+
+        # Render the title and shrink it to fit inside the card if needed, so
+        # long titles like "BOSS DEFEATED!" never spill outside the box.
+        main = self.font_big.render(title, True, accent)
+        shadow = self.font_big.render(title, True, (0, 0, 0))
+        max_w = card_w - 70
+        if main.get_width() > max_w:
+            s = max_w / main.get_width()
+            size = (int(main.get_width() * s), int(main.get_height() * s))
+            main = pygame.transform.smoothscale(main, size)
+            shadow = pygame.transform.smoothscale(shadow, size)
+        ty = rect.y + 44
+        self.screen.blit(shadow, (cx - main.get_width() // 2 + 3, ty + 3))
+        self.screen.blit(main, (cx - main.get_width() // 2, ty))
+
         bonus = self.font_menu.render(
             f"+{max(0, self.timer) * 10} time bonus", True, (255, 255, 255))
-        self.screen.blit(bonus, (cx - bonus.get_width() // 2, rect.y + 116))
+        self.screen.blit(bonus, (cx - bonus.get_width() // 2, rect.y + 150))
         nxt = self.font_small.render(
             "Next level starting...   (Enter to skip)", True, (225, 230, 245))
-        self.screen.blit(nxt, (cx - nxt.get_width() // 2, rect.y + 162))
+        self.screen.blit(nxt, (cx - nxt.get_width() // 2, rect.y + 196))
 
     def draw_gameover(self):
         self._draw_background(self.camera_x)
@@ -1294,6 +1390,8 @@ class Game:
                 self._events_paused(event)
             elif self.state == SETTINGS:
                 self._events_settings(event)
+            elif self.state == CONTROLS:
+                self._events_controls(event)
             elif self.state == SHOP:
                 self._events_shop(event)
             elif self.state in (TOS, LEGAL):
@@ -1348,6 +1446,14 @@ class Game:
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_SPACE, pygame.K_UP, pygame.K_w):
                 self.player.register_jump_press()
+            elif event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
+                self.player.try_dash()
+            elif event.key == pygame.K_q:
+                if self.skills is not None:
+                    self.skills.activate_q()
+            elif event.key == pygame.K_e:
+                if self.skills is not None:
+                    self.skills.activate_ult()
             elif event.key == pygame.K_ESCAPE:
                 self.state = PAUSED
                 sfx_pause()
@@ -1418,6 +1524,9 @@ class Game:
             sfx_menu_select()
             settings.god_mode = not settings.god_mode
             settings.save()
+        elif self.btn_controls.is_clicked(event):
+            sfx_menu_select()
+            self.state = CONTROLS
         elif self.btn_tos.is_clicked(event):
             sfx_menu_select()
             self.tos_scroll = 0.0
@@ -1430,6 +1539,16 @@ class Game:
             sfx_menu_select()
             settings.save()
             self.state = self.settings_return
+
+    def _events_controls(self, event):
+        if event.type == pygame.KEYDOWN and event.key in (
+                pygame.K_ESCAPE, pygame.K_BACKSPACE):
+            sfx_menu_select()
+            self.state = SETTINGS
+            return
+        if self.btn_controls_back.is_clicked(event):
+            sfx_menu_select()
+            self.state = SETTINGS
 
     def _cycle_starting_lives(self):
         order = [3, 5, -1]
@@ -1558,7 +1677,9 @@ class Game:
         """Scale the offscreen render surface onto the actual window."""
         self.window.fill((0, 0, 0))
         scaled = pygame.transform.scale(self.render, self._dst.size)
-        self.window.blit(scaled, self._dst.topleft)
+        sx = self._dst.x + int(self.render_shake[0] * self._scale)
+        sy = self._dst.y + int(self.render_shake[1] * self._scale)
+        self.window.blit(scaled, (sx, sy))
 
     def _cycle_display_mode(self):
         settings.display_mode = (settings.display_mode + 1) % len(self.display_modes)
@@ -1594,6 +1715,7 @@ class Game:
     def run(self):
         while True:
             self._handle_events()
+            self.render_shake = (0, 0)
 
             if self.state == PLAYING:
                 self.player.handle_input()
@@ -1618,6 +1740,8 @@ class Game:
                 self.draw_pause()
             elif self.state == SETTINGS:
                 self.draw_settings()
+            elif self.state == CONTROLS:
+                self.draw_controls()
             elif self.state == SHOP:
                 self.shop.draw()
             elif self.state == TOS:

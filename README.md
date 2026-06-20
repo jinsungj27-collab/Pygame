@@ -1,4 +1,4 @@
-# Super Jin - Enhanced Edition v2.4.0
+# Super Jin - Enhanced Edition v2.5.0
 
 A fully-featured 2D platformer built from scratch in Python with pygame. Features endless procedurally-generated levels with parkour, boss battles, flying enemies, collectible coins, themed parallax backgrounds, a complete menu/settings system, and persistent high scores — all with zero external assets (graphics and music are synthesized at runtime).
 
@@ -161,7 +161,28 @@ Planned features: checkpoints, more power-ups, additional enemy types, fire-flow
 
 ## 📜 Version History
 
-### v2.4.0 (Current)
+### v2.5.0 (Current)
+- **Character skills in boss battles** — every hero now has two unique skills,
+  usable in any boss fight (Endless boss stages and PvP boss-rush):
+  - **Q** — a quick support skill (5s cooldown), offensive or defensive
+  - **E** — a powerful Ultimate (30s cooldown) with a big impact
+  - Both start a fight on a short 5s cooldown; afterwards Q stays 5s and the
+    Ultimate uses its full 30s
+- Skill cards sit under the SCORE (Q) and COINS (E) bars with a ticking-clock
+  cooldown animation, a ready-glow, and the seconds remaining
+- Skill effects include dodges, shields, heals, blinks, dash-strikes, homing
+  projectiles, freezes, poison, and heavy direct damage — each character is
+  different, with particle bursts, auras, and a screen shake on Ultimates
+- **Shop upgrades**:
+  - Click any character's sprite to preview their suits — even ones you haven't
+    bought yet (view-only until unlocked)
+  - New **"i" info panel** on every character showing both skills (name, type,
+    cooldown, description) plus a suit gallery, so you can plan before buying
+- Bosses can now be frozen/stunned by player skills, and take reliable skill
+  damage that lands through their post-hit invincibility
+- "How to Play" now documents the Q and E skill keys
+
+### v2.4.0
 - **New PvP / Boss-Rush mode** — a mode-select screen lets you choose Endless or
   a 10-boss gauntlet, each boss with its own name, attack style, AI level, color
   tint, and tense per-fight music

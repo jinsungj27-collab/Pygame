@@ -1,11 +1,20 @@
 import pygame
 import math
 from constants import GRAVITY, TERMINAL_VELOCITY, SCREEN_HEIGHT
-from sounds import sfx_jump, sfx_shrink, sfx_die
+from sounds import sfx_jump, sfx_shrink, sfx_die, sfx_dash
 from settings import settings
 
 
 class Player(pygame.sprite.Sprite):
+    # --- Dash skill (Left/Right Shift) -------------------------------------
+    # A short, fast, perfectly horizontal burst in the facing direction.
+    # DASH_SPEED is kept below TILE_SIZE (40) so a single frame can never
+    # tunnel through a 1-tile-thick wall - the existing collision resolver
+    # then stops the dash cleanly against any wall, even at high speed.
+    DASH_SPEED    = 20.0   # pixels per frame during the dash
+    DASH_DURATION = 7      # frames the dash lasts (~0.12s) -> ~140px reach
+    DASH_COOLDOWN = 28     # frames before it can be used again
+
     def __init__(self, x, y, sprites):
         super().__init__()
         self.sprites = sprites
@@ -44,6 +53,12 @@ class Player(pygame.sprite.Sprite):
 
         self.fast_fall = False
 
+        # Dash state.
+        self.dash_timer    = 0   # >0 while dashing
+        self.dash_cooldown = 0   # >0 while on cooldown
+        self.dash_dir      = 1   # locked facing direction for the active dash
+        self.dash_trail    = []  # recent (x, draw_top, image) for the afterimage
+
         self.update_image()
 
     def update_image(self):
@@ -60,6 +75,10 @@ class Player(pygame.sprite.Sprite):
 
         if self.is_dead:
             self.image = self.sprites.player_small['jump']
+        elif self.dash_timer > 0:
+            # A committed running/lunge pose while dashing.
+            self.image = sprite_set['walk1']
+            self.walk_bob = 0
         elif self.flag_sliding:
             self.image = sprite_set['walk1']
         elif not self.on_ground:
@@ -92,8 +111,26 @@ class Player(pygame.sprite.Sprite):
         self.jump_buffered     = True
         self.jump_buffer_timer = 8
 
+    def try_dash(self):
+        """Begin a dash in the current facing direction. Returns True if a
+        dash actually started (so the caller can play effects)."""
+        if self.is_dead or self.flag_sliding or self.victory_walk:
+            return False
+        if self.dash_timer > 0 or self.dash_cooldown > 0:
+            return False
+        self.dash_dir   = 1 if self.facing_right else -1
+        self.dash_timer = self.DASH_DURATION
+        self.vx = self.dash_dir * self.DASH_SPEED
+        self.vy = 0.0
+        sfx_dash()
+        return True
+
     def handle_input(self):
         if self.is_dead or self.flag_sliding or self.victory_walk:
+            return
+        # While dashing, movement input is locked out so the dash stays a
+        # clean, fixed-direction burst that can't be steered or cancelled.
+        if self.dash_timer > 0:
             return
 
         keys = pygame.key.get_pressed()
@@ -170,6 +207,9 @@ class Player(pygame.sprite.Sprite):
         sfx_die()
 
     def update(self):
+        if self.dash_cooldown > 0 and self.dash_timer == 0:
+            self.dash_cooldown -= 1
+
         if self.is_dead:
             self.vy    += 0.4
             self.y     += self.vy
@@ -196,6 +236,27 @@ class Player(pygame.sprite.Sprite):
             self.update_image()
             return
 
+        if self.dash_timer > 0:
+            # Straight, gravity-free horizontal burst. The fixed dash_dir and
+            # the sub-tile DASH_SPEED keep it precise: it can't be steered and
+            # can't tunnel through walls.
+            self.vx = self.dash_dir * self.DASH_SPEED
+            self.vy = 0.0
+            self.x += self.vx
+            self.rect.centerx = self.x
+            self.anim_frame += 0.5
+            self._select_image()
+            draw_top = self.rect.bottom - (80 if self.is_big else 40)
+            self.dash_trail.append((self.rect.x, draw_top, self.image))
+            if len(self.dash_trail) > 6:
+                self.dash_trail.pop(0)
+            self.dash_timer -= 1
+            if self.dash_timer == 0:
+                # Flow out at run speed rather than stopping dead.
+                self.vx = self.dash_dir * self.max_speed
+                self.dash_cooldown = self.DASH_COOLDOWN
+            return
+
         if self.fast_fall:
             self.vy = min(self.vy + GRAVITY * 2.2, 22)
         else:
@@ -213,7 +274,20 @@ class Player(pygame.sprite.Sprite):
         # left untouched here so movement/ducking physics stay correct.
         self._select_image()
 
+        # Fade out the dash afterimage once the dash has ended.
+        if self.dash_trail:
+            self.dash_trail.pop(0)
+
     def draw(self, surface, camera_x):
+        # Dash afterimages: faded ghost copies of recent frames behind the
+        # player, for a smooth motion-trail feel.
+        n = len(self.dash_trail)
+        for i, (tx, ty, img) in enumerate(self.dash_trail):
+            ghost = img.copy()
+            alpha = int(50 + 110 * (i + 1) / n)
+            ghost.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
+            surface.blit(ghost, (tx - camera_x - 5, ty))
+
         if self.invincible_timer > 0 and (self.invincible_timer // 4) % 2 == 0:
             return
 

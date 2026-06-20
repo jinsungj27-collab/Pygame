@@ -304,6 +304,9 @@ class Boss(pygame.sprite.Sprite):
         self.is_dead = False
         self.dead_timer = 0
         self.invincible = 0
+        # Set by player Ultimates/skills that stun or freeze the boss: while
+        # > 0 the boss can't move, jump or attack (gravity still applies).
+        self.frozen = 0
         self.facing_right = False
         self.on_ground = False
         self._air_frames = 0
@@ -341,7 +344,14 @@ class Boss(pygame.sprite.Sprite):
         if self.invincible > 0:
             self.invincible -= 1
 
-        self._move(player)
+        # When frozen by a player skill the boss holds still (no movement,
+        # jumping or attacks) but gravity still pins it to the floor.
+        frozen = self.frozen > 0
+        if frozen:
+            self.frozen -= 1
+            self.vx = 0
+        else:
+            self._move(player)
 
         # Gravity + floor collision.
         self.vy = min(self.vy + GRAVITY, TERMINAL_VELOCITY)
@@ -363,14 +373,15 @@ class Boss(pygame.sprite.Sprite):
         # require several airborne frames so the 1px resting jitter on the
         # floor doesn't register as a landing every other frame.
         if self.on_ground:
-            if self._air_frames > 8:
+            if self._air_frames > 8 and not frozen:
                 self._on_land(projectiles)
             self._air_frames = 0
         else:
             self._air_frames += 1
 
-        self._jump(player)
-        self._shoot(projectiles, player)
+        if not frozen:
+            self._jump(player)
+            self._shoot(projectiles, player)
 
         self.anim_frame += 0.12 + 0.015 * self.ai
 
@@ -542,6 +553,20 @@ class Boss(pygame.sprite.Sprite):
             return True
         return False
 
+    def take_skill_damage(self, n=1):
+        """Damage dealt by a player's Q skill or Ultimate. Unlike stomping,
+        this lands even during the brief post-hit invincibility so skills are
+        always reliable. Returns True if this killed the boss."""
+        if self.is_dead:
+            return False
+        self.hp = max(0, self.hp - max(1, int(n)))
+        self.invincible = max(self.invincible, 24)
+        sfx_stomp()
+        if self.hp <= 0:
+            self.die()
+            return True
+        return False
+
     def die(self):
         self.is_dead = True
         self.dead_timer = 100
@@ -586,6 +611,10 @@ class Boss(pygame.sprite.Sprite):
         elif self.invincible > 0 and (self.invincible // 4) % 2 == 0:
             img = img.copy()
             img.fill((255, 120, 120, 0), special_flags=pygame.BLEND_RGB_ADD)
+        elif self.frozen > 0:
+            # A frosty blue tint while stunned/frozen by a player skill.
+            img = img.copy()
+            img.fill((90, 150, 220, 0), special_flags=pygame.BLEND_RGB_ADD)
 
         draw_x = self.rect.centerx - img.get_width() // 2 - camera_x
         draw_y = self.rect.bottom - img.get_height()
