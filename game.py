@@ -215,9 +215,9 @@ class Game:
         self.legal_scroll = 0.0
         self._doc_max_scroll = 0.0
 
-        self.btn_retry    = Button(cx, 340, 260, 60, "RETRY", self.font_menu, icon='play',
+        self.btn_retry    = Button(cx, 356, 260, 60, "RETRY", self.font_menu, icon='play',
                                    base_color=(30, 120, 60), hover_color=(50, 170, 90))
-        self.btn_go_menu  = Button(cx, 415, 260, 60, "MAIN MENU", self.font_menu, icon='home',
+        self.btn_go_menu  = Button(cx, 428, 260, 60, "MAIN MENU", self.font_menu, icon='home',
                                    base_color=(110, 70, 30), hover_color=(160, 110, 50))
 
     def _music_label(self):
@@ -380,6 +380,9 @@ class Game:
     def _on_victory(self):
         """All PvP bosses cleared - show the game-over screen as a win."""
         stop_music()
+        # Bank the run's coins into the persistent wallet, just like a normal
+        # game over, so a winning run isn't penalized by losing its coins.
+        self.wallet += self.coins
         self.victory = True
         self.new_record = self.score > self.prev_high
         if self.score > self.high_score:
@@ -964,7 +967,7 @@ class Game:
         bar_w, bar_h = 360, 18
         x = SCREEN_WIDTH // 2 - bar_w // 2
         y = 84
-        label = self.font_hud.render("BOSS", True, (255, 90, 90))
+        label = self.font_hud.render(self._boss_name(), True, (255, 90, 90))
         self.screen.blit(label, (x, y - 24))
         pygame.draw.rect(self.screen, (20, 20, 30), (x - 3, y - 3, bar_w + 6, bar_h + 6),
                          border_radius=6)
@@ -1075,17 +1078,30 @@ class Game:
         cy = SCREEN_HEIGHT // 2 - 10
         if self.is_boss:
             accent = (255, 80, 80)
-            rect = self._draw_card(cx, cy, 560, 300, accent)
-            self._draw_title_banner("BOSS BATTLE", rect.y + 40, color=accent)
+            rect = self._draw_card(cx, cy, 560, 366, accent)
+            self._draw_title_banner("BOSS BATTLE", rect.y + 28, color=accent,
+                                    big=False)
             nm = self.font_title.render(self._boss_name(), True, (255, 220, 130))
-            self.screen.blit(nm, (cx - nm.get_width() // 2, rect.y + 128))
+            self.screen.blit(nm, (cx - nm.get_width() // 2, rect.y + 96))
             if self.mode == MODE_PVP:
                 sub = self.font_menu.render(
                     f"PvP   Level {self.level_num} / {pvp_level_count()}",
                     True, (255, 170, 170))
             else:
                 sub = self.font_menu.render("Stomp it to win!", True, (235, 235, 245))
-            self.screen.blit(sub, (cx - sub.get_width() // 2, rect.y + 182))
+            self.screen.blit(sub, (cx - sub.get_width() // 2, rect.y + 152))
+
+            # Remind the player their character's skills are available here.
+            if self.skills is not None:
+                q_name = self.skills.q_def['name']
+                u_name = self.skills.ult_def['name']
+                hint1 = self.font_small.render(
+                    f"Q  -  {q_name}        E  -  {u_name}", True, (150, 220, 255))
+                self.screen.blit(hint1, (cx - hint1.get_width() // 2, rect.y + 204))
+                hint2 = self.font_small.render(
+                    "Press Q for your Skill and E for your Ultimate!",
+                    True, (200, 210, 230))
+                self.screen.blit(hint2, (cx - hint2.get_width() // 2, rect.y + 230))
         else:
             accent = tuple(self.theme.get('sun', (255, 220, 0)))[:3]
             rect = self._draw_card(cx, cy, 560, 300, accent)
@@ -1124,6 +1140,11 @@ class Game:
         for b in (self.btn_resume, self.btn_settings, self.btn_mainmenu):
             b.update(mp)
             b.draw(self.screen)
+        hint = self.font_small.render(
+            "Move: A / D    Jump: Space    Dash: Shift    "
+            "Skill: Q    Ultimate: E", True, (200, 208, 228))
+        self.screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2,
+                                SCREEN_HEIGHT - 40))
 
     def draw_settings(self):
         if self.settings_return == MENU:
@@ -1348,12 +1369,15 @@ class Game:
         sc = self.font_menu.render(f"Score: {self.score:06d}", True, (255, 255, 255))
         self.screen.blit(sc, (SCREEN_WIDTH // 2 - sc.get_width() // 2, 200))
         hs = self.font_menu.render(f"High Score: {self.high_score:06d}", True, (255, 220, 90))
-        self.screen.blit(hs, (SCREEN_WIDTH // 2 - hs.get_width() // 2, 240))
+        self.screen.blit(hs, (SCREEN_WIDTH // 2 - hs.get_width() // 2, 236))
+        coins_txt = self.font_menu.render(
+            f"Coins earned: +{self.coins}", True, (255, 215, 70))
+        self.screen.blit(coins_txt, (SCREEN_WIDTH // 2 - coins_txt.get_width() // 2, 272))
         if self.new_record:
             flash = (pygame.time.get_ticks() // 250) % 2 == 0
             if flash:
                 nr = self.font_menu.render("NEW HIGH SCORE!", True, (120, 255, 140))
-                self.screen.blit(nr, (SCREEN_WIDTH // 2 - nr.get_width() // 2, 280))
+                self.screen.blit(nr, (SCREEN_WIDTH // 2 - nr.get_width() // 2, 308))
         mp = self._logical_mouse()
         for b in (self.btn_retry, self.btn_go_menu):
             b.update(mp)

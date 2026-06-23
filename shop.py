@@ -56,7 +56,7 @@ CHARACTERS += [
         'jump': ([180, 720, 1000], 'square'),
         'skins': [
             {'id': 'classic', 'name': 'Ember Red', 'suit': (170, 30, 20), 'price': 0},
-            {'id': 'magma',   'name': 'Magma',     'suit': (90, 20, 20)},
+            {'id': 'magma',   'name': 'Inferno Blue', 'suit': (40, 90, 215)},
         ],
     },
     {
@@ -67,7 +67,7 @@ CHARACTERS += [
         'jump': ([120, 400, 520], 'triangle'),
         'skins': [
             {'id': 'classic', 'name': 'Midnight', 'suit': (40, 30, 60), 'price': 0},
-            {'id': 'violet',  'name': 'Violet',   'suit': (140, 70, 210)},
+            {'id': 'violet',  'name': 'Crimson',  'suit': (200, 35, 55)},
         ],
     },
     {
@@ -77,7 +77,7 @@ CHARACTERS += [
         'jump': ([220, 880, 1180], 'sine'),
         'skins': [
             {'id': 'classic', 'name': 'Bronze',  'suit': (170, 110, 40), 'price': 0},
-            {'id': 'platinum', 'name': 'Platinum', 'suit': (200, 205, 215)},
+            {'id': 'platinum', 'name': 'Emerald', 'suit': (25, 155, 90)},
         ],
     },
     {
@@ -87,7 +87,7 @@ CHARACTERS += [
         'jump': ([210, 640, 880], 'sine'),
         'skins': [
             {'id': 'classic', 'name': 'Blush', 'suit': (200, 60, 110), 'price': 0},
-            {'id': 'cream',   'name': 'Cream', 'suit': (240, 225, 200)},
+            {'id': 'cream',   'name': 'Sapphire', 'suit': (45, 85, 200)},
         ],
     },
 ]
@@ -101,7 +101,7 @@ CHARACTERS += [
         'jump': ([260, 540, 700], 'sine'),
         'skins': [
             {'id': 'classic', 'name': 'Glacier', 'suit': (90, 150, 200), 'price': 0},
-            {'id': 'snow',    'name': 'Snow',    'suit': (235, 245, 255)},
+            {'id': 'snow',    'name': 'Deep Freeze', 'suit': (25, 55, 140)},
         ],
     },
     {
@@ -112,7 +112,7 @@ CHARACTERS += [
         'jump': ([140, 560, 760], 'square'),
         'skins': [
             {'id': 'classic', 'name': 'Toxic', 'suit': (60, 120, 30), 'price': 0},
-            {'id': 'jungle',  'name': 'Jungle', 'suit': (25, 70, 35)},
+            {'id': 'jungle',  'name': 'Venom', 'suit': (130, 40, 175)},
         ],
     },
     {
@@ -123,7 +123,7 @@ CHARACTERS += [
         'jump': ([240, 760, 1100], 'triangle'),
         'skins': [
             {'id': 'classic', 'name': 'Nebula', 'suit': (90, 40, 150), 'price': 0},
-            {'id': 'starlight', 'name': 'Starlight', 'suit': (180, 160, 230)},
+            {'id': 'starlight', 'name': 'Cosmic Cyan', 'suit': (30, 190, 210)},
         ],
     },
 ]
@@ -645,20 +645,26 @@ class ShopScreen:
         screen.blit(preview, (left_cx - preview.get_width() // 2, box.y + 96))
 
         # Skin previews row (so the player can review suits before buying).
+        # Lay the suits out in equal-width cells across the left column and
+        # clamp each name to its cell so adjacent names never overlap.
         sk_label = game.font_small.render("SUITS", True, (180, 200, 240))
         screen.blit(sk_label, (left_cx - sk_label.get_width() // 2, box.y + 210))
-        sx = box.x + 28
+        skins = char['skins']
+        gx0 = box.x + 20
+        gw = (box.x + 226) - gx0          # keep clear of the right column
+        cell_w = gw / max(1, len(skins))
         sy = box.y + 236
-        for skin in char['skins']:
+        for i, skin in enumerate(skins):
+            ccx = gx0 + cell_w * (i + 0.5)
             sp = self._preview(char['id'], skin['id'], scale=2)
-            screen.blit(sp, (sx, sy))
+            screen.blit(sp, (int(ccx - sp.get_width() // 2), sy))
             nm = game.font_small.render(skin['name'], True, (210, 215, 235))
-            if nm.get_width() > 84:
+            max_nw = cell_w - 8
+            if nm.get_width() > max_nw:
                 nm = pygame.transform.smoothscale(
-                    nm, (84, nm.get_height()))
-            screen.blit(nm, (sx + sp.get_width() // 2 - nm.get_width() // 2,
-                             sy + sp.get_height() + 2))
-            sx += sp.get_width() + 16
+                    nm, (max(1, int(max_nw)), nm.get_height()))
+            screen.blit(nm, (int(ccx - nm.get_width() // 2),
+                             sy + sp.get_height() + 4))
 
         # Right column: the two skills.
         rx = box.x + 230
